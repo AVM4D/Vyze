@@ -1,50 +1,77 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [response, setResponse] = useState("Type your name below to greet the Rust backend...");
+  const [isLoading, setIsLoading] = useState(false);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  // This function runs when the user submits the form
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault(); // Stop page reload
+    if (!prompt.trim()) return;
+
+    setIsLoading(true);
+    setResponse("Sending to Rust backend...");
+    try {
+      // Call the "greet" command in src-tauri/src/lib.rs
+      const res: string = await invoke("greet", { name: prompt });
+      setResponse(res);
+    } catch (err) {
+      setResponse(`Error occurred: ${err}`);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="hud-container">
+      <div className="hud-card">
+        {/* Header section with brand and status indicator */}
+        <div className="hud-header">
+          <div className="logo-section">
+            <div className="logo-glow"></div>
+            <span className="hud-title">VYZE</span>
+          </div>
+          <span className="status-badge">HUD ACTIVE</span>
+        </div>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+        {/* Content section */}
+        <div className="hud-content">
+          <p className="welcome-text">
+            Always-on desktop copilot. Currently listening globally for
+            <code style={{ background: "rgba(255,255,255,0.06)", padding: "2px 6px", borderRadius: "4px", marginLeft: "4px", marginRight: "4px", fontFamily: "monospace" }}>Ctrl + Space</code>
+            to toggle overlay visibility.
+          </p>
+
+          {/* Response Box */}
+          <div className="response-card">
+            {response}
+          </div>
+
+          {/* Prompt Form */}
+          <form onSubmit={handleSubmit} className="prompt-area">
+            <input
+              type="text"
+              className="prompt-input"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Say hello to Rust..."
+              disabled={isLoading}
+            />
+            <button type="submit" className="send-button" disabled={isLoading}>
+              {isLoading ? "..." : "Send"}
+            </button>
+          </form>
+        </div>
+
+        {/* Footer info */}
+        <div className="footer-hint">
+          Right-click tray icon to Toggle or Exit.
+        </div>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </div>
   );
 }
 
