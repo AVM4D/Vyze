@@ -1,42 +1,53 @@
-:root {
+/* Make absolutely sure all parent elements are 100% transparent and have no default borders */
+html,
+body,
+#root {
+  background: transparent !important;
   background-color: transparent !important;
-}
-
-body {
   margin: 0;
   padding: 0;
-  background-color: transparent !important;
-  color: #ffffff;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  overflow: hidden;
-  /* Prevent scrolls or scrollbars from popping up */
-  height: 100vh;
   width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Center our React app content on the screen */
+#root {
   display: flex;
   justify-content: center;
   align-items: center;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: #ffffff;
 }
 
 .hud-container {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 90%;
-  max-width: 550px;
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
+  padding: 0px;
+  /* Card fills the window bounds exactly */
 }
 
 /* The glass card */
 .hud-card {
   width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   background: rgba(20, 20, 20, 0.75);
+  /* 75% dark gray, 25% transparent */
   backdrop-filter: blur(24px) saturate(190%);
   /* Frosty blur effect */
   -webkit-backdrop-filter: blur(24px) saturate(190%);
   border: 1px solid rgba(255, 255, 255, 0.08);
   /* Tiny subtle white border */
-  border-radius: 20px;
+  border-radius: 8px;
   padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   box-shadow:
     0 10px 40px rgba(0, 0, 0, 0.5),
     0 1px 0 rgba(255, 255, 255, 0.1) inset,
