@@ -12,9 +12,16 @@
   "app": {
     "windows": [
       {
-        "title": "tauri-app",
+        "label": "main",
+        "title": "Vyze",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true
       }
     ],
     "security": {
