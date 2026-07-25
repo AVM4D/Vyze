@@ -11,15 +11,15 @@ pub trait AiProvider: Send + Sync {
     fn stream_chat(&self, prompt: &str) -> BoxStream<Result<String, String>>;
 }
 
-// Struct representing the Google Gemini client
+// ==========================================
+// 1. GOOGLE GEMINI PROVIDER (Cloud API)
+// ==========================================
 pub struct GeminiProvider {
     api_key: String,
-    model: String, // Made the model name configurable
+    model: String,
 }
 
 impl GeminiProvider {
-    // We create a new client, letting the user pass an optional model.
-    // If they pass None, we default to "gemini-2.5-flash".
     pub fn new(api_key: String, model: Option<String>) -> Self {
         Self {
             api_key,
@@ -30,15 +30,11 @@ impl GeminiProvider {
 
 impl AiProvider for GeminiProvider {
     fn stream_chat(&self, prompt: &str) -> BoxStream<Result<String, String>> {
-        // Clone variables so they can be moved inside the async background task
         let api_key = self.api_key.clone();
         let model = self.model.clone();
         let prompt = prompt.to_string();
-
-        // Create a channel (sender/receiver) to pass words from the background thread to the UI
         let (tx, rx) = mpsc::channel(100);
 
-        // Spawn a background task to handle the web request
         tokio::spawn(async move {
             let client = reqwest::Client::new();
             let url = format!(
@@ -46,7 +42,6 @@ impl AiProvider for GeminiProvider {
                 model, api_key
             );
 
-            // Construct the JSON request body required by Gemini's API
             let body = serde_json::json!({
                 "contents": [
                     {
@@ -59,7 +54,6 @@ impl AiProvider for GeminiProvider {
                 ]
             });
 
-            // Send the POST request to Google's server
             let res = match client.post(&url).json(&body).send().await {
                 Ok(response) => response,
                 Err(e) => {
@@ -68,9 +62,8 @@ impl AiProvider for GeminiProvider {
                 }
             };
 
-            // If Google returned an error status code (like 400 Bad Request or 403 Invalid Key)
             if !res.status().is_success() {
-                let status = res.status(); // Save the status first!
+                let status = res.status();
                 let err_text = res
                     .text()
                     .await
@@ -81,30 +74,21 @@ impl AiProvider for GeminiProvider {
                 return;
             }
 
-            // Convert the response into a stream of raw bytes
             let mut stream = res.bytes_stream();
             let mut buffer = String::new();
 
-            // Loop and read chunks as they arrive over the internet
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
                     Ok(bytes) => {
-                        // Convert binary bytes to a UTF-8 string slice
                         if let Ok(text) = std::str::from_utf8(&bytes) {
                             buffer.push_str(text);
 
-                            // Process buffer line-by-line
                             while let Some(newline_idx) = buffer.find('\n') {
-                                // Extract the line (excluding the \n character)
                                 let line = buffer[..newline_idx].trim().to_string();
-                                // Remove the processed line from the buffer
                                 buffer.drain(..=newline_idx);
 
-                                // If the line starts with "data:", it contains a JSON packet
                                 if line.starts_with("data:") {
                                     let json_str = line["data:".len()..].trim();
-
-                                    // Parse the JSON and extract the text token
                                     if let Ok(val) =
                                         serde_json::from_str::<serde_json::Value>(json_str)
                                     {
@@ -112,9 +96,8 @@ impl AiProvider for GeminiProvider {
                                             ["parts"][0]["text"]
                                             .as_str()
                                         {
-                                            // Send the word token through the channel
                                             if tx.send(Ok(text_val.to_string())).await.is_err() {
-                                                break; // Receiver hung up, exit loop
+                                                break;
                                             }
                                         }
                                     }
@@ -130,15 +113,133 @@ impl AiProvider for GeminiProvider {
             }
         });
 
-        // Convert our Channel Receiver into a futures Stream using unfold
         let response_stream = futures_util::stream::unfold(rx, |mut rx| async move {
             match rx.recv().await {
                 Some(item) => Some((item, rx)),
-                None => None, // Stream finished
+                None => None,
             }
         });
 
-        // Pin the stream in memory and return it
+        Box::pin(response_stream)
+    }
+}
+
+// ==========================================
+// 2. OLLAMA PROVIDER (Local Offline API)
+// ==========================================
+pub struct OllamaProvider {
+    model: String,
+}
+
+impl OllamaProvider {
+    pub fn new(model: Option<String>) -> Self {
+        Self {
+            model: model.unwrap_or_else(|| "llama3".to_string()),
+        }
+    }
+}
+
+impl AiProvider for OllamaProvider {
+    fn stream_chat(&self, prompt: &str) -> BoxStream<Result<String, String>> {
+        let model = self.model.clone();
+        let prompt = prompt.to_string();
+        let (tx, rx) = mpsc::channel(100);
+
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            let url = "http://localhost:11434/v1/chat/completions";
+
+            // Construct standard OpenAI JSON payload
+            let body = serde_json::json!({
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "stream": true
+            });
+
+            // Send request to local Ollama port
+            let res = match client.post(url).json(&body).send().await {
+                Ok(response) => response,
+                Err(e) => {
+                    let _ = tx
+                        .send(Err(format!("Local Ollama network error: {}", e)))
+                        .await;
+                    return;
+                }
+            };
+
+            // Handle errors (e.g. if the user didn't pull the Llama3 model first)
+            if !res.status().is_success() {
+                let status = res.status();
+                let err_text = res
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                let _ = tx
+                    .send(Err(format!(
+                        "Local Ollama API error ({}): {}",
+                        status, err_text
+                    )))
+                    .await;
+                return;
+            }
+
+            let mut stream = res.bytes_stream();
+            let mut buffer = String::new();
+
+            while let Some(chunk_result) = stream.next().await {
+                match chunk_result {
+                    Ok(bytes) => {
+                        if let Ok(text) = std::str::from_utf8(&bytes) {
+                            buffer.push_str(text);
+
+                            while let Some(newline_idx) = buffer.find('\n') {
+                                let line = buffer[..newline_idx].trim().to_string();
+                                buffer.drain(..=newline_idx);
+
+                                if line.starts_with("data:") {
+                                    let json_str = line["data:".len()..].trim();
+
+                                    // Ollama sends [DONE] to signal completion
+                                    if json_str == "[DONE]" {
+                                        break;
+                                    }
+
+                                    // Parse choices[0].delta.content
+                                    if let Ok(val) =
+                                        serde_json::from_str::<serde_json::Value>(json_str)
+                                    {
+                                        if let Some(text_val) =
+                                            val["choices"][0]["delta"]["content"].as_str()
+                                        {
+                                            if tx.send(Ok(text_val.to_string())).await.is_err() {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("Stream error: {}", e))).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        let response_stream = futures_util::stream::unfold(rx, |mut rx| async move {
+            match rx.recv().await {
+                Some(item) => Some((item, rx)),
+                None => None,
+            }
+        });
+
         Box::pin(response_stream)
     }
 }
