@@ -1,3 +1,5 @@
+mod ai;
+
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
@@ -9,7 +11,6 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
-
 
 fn toggle_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -29,13 +30,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![greet])
         .setup(|app| {
-           
             let toggle = MenuItemBuilder::with_id("toggle", "Toggle Vyze").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
-            let menu = MenuBuilder::new(app)
-                .items(&[&toggle, &quit])
-                .build()?;
+            let menu = MenuBuilder::new(app).items(&[&toggle, &quit]).build()?;
 
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
@@ -51,17 +49,13 @@ pub fn run() {
                 })
                 .build(app)?;
 
-           
             let ctrl_space = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
 
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(|app, shortcut, event| {
-                       
                         if event.state() == ShortcutState::Pressed {
-                            
                             if shortcut.matches(Modifiers::CONTROL, Code::Space) {
-                                
                                 toggle_window(app);
                             }
                         }
