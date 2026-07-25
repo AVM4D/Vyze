@@ -20,10 +20,12 @@ pub struct GeminiProvider {
 }
 
 impl GeminiProvider {
+    // We create a new client, letting the user pass an optional model.
+    // If they pass None, we default to "gemini-3.5-flash".
     pub fn new(api_key: String, model: Option<String>) -> Self {
         Self {
             api_key,
-            model: model.unwrap_or_else(|| "gemini-2.5-flash".to_string()),
+            model: model.unwrap_or_else(|| "gemini-3.5-flash".to_string()),
         }
     }
 }

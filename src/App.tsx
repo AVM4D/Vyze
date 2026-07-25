@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core"; // 1. Added Channel to our imports
 import "./App.css";
 
+// This is our main React screen
 function App() {
   const [prompt, setPrompt] = useState("");
   const [response, setResponse] = useState("Select a provider, set your key, and ask Vyze a question...");
-  const [provider, setProvider] = useState("gemini"); // Stores "gemini" or "ollama"
+  const [provider, setProvider] = useState("gemini");
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -13,37 +14,41 @@ function App() {
     if (!prompt.trim()) return;
 
     setIsLoading(true);
-    setResponse(""); // Clear previous text to start a clean stream!
+    setResponse(""); // Clear text to prepare for incoming stream
 
     try {
-      // Call our Rust command ask_vyze
+      // 2. Create a new Channel envelope, giving it our update callback function
+      const tokenChannel = new Channel<string>();
+
+      // When a message (token) arrives from Rust, append it to the screen
+      tokenChannel.onmessage = (token: string) => {
+        setResponse((prev) => prev + token);
+      };
+
+      // 3. Invoke ask_vyze and pass the channel envelope
       await invoke("ask_vyze", {
         prompt: prompt,
         provider: provider,
-        // The callback callback mapping to our Rust Channel
-        onToken: (token: string) => {
-          setResponse((prev) => prev + token); // Append each word token as it arrives
-        }
+        onToken: tokenChannel // Pass the channel instance
       });
     } catch (err) {
       setResponse(`Error: ${err}`);
     } finally {
       setIsLoading(false);
-      setPrompt(""); // Clear input box
+      setPrompt(""); // Clear the text box
     }
   }
 
   return (
     <div className="hud-container">
       <div className="hud-card">
-        {/* Header with Title and Model Dropdown Selector */}
+        {/* Header */}
         <div className="hud-header">
           <div className="logo-section">
             <div className="logo-glow"></div>
             <span className="hud-title">VYZE</span>
           </div>
 
-          {/* Dropdown Selector */}
           <div className="provider-select-container">
             <select
               className="provider-select"
@@ -57,7 +62,7 @@ function App() {
           </div>
         </div>
 
-        {/* Content Area */}
+        {/* Content */}
         <div className="hud-content">
           <p className="welcome-text">
             Always-on desktop copilot. Currently listening globally for
@@ -65,12 +70,12 @@ function App() {
             to toggle overlay visibility.
           </p>
 
-          {/* Response card (updates live as tokens stream in) */}
+          {/* Response Box */}
           <div className="response-card" style={{ overflowY: "auto", maxGain: "150px" }}>
             {response}
           </div>
 
-          {/* Prompt input form */}
+          {/* Input Box */}
           <form onSubmit={handleSubmit} className="prompt-area">
             <input
               type="text"

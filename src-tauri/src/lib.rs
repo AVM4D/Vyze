@@ -79,6 +79,7 @@ fn toggle_window(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    dotenvy::dotenv().ok();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         // Register both greet AND ask_vyze commands
