@@ -21,7 +21,7 @@ fn greet(name: &str) -> String {
 // - on_token: The Tauri channel that pipes tokens (words) back to React.
 #[tauri::command]
 async fn ask_vyze(
-    prompt: String,
+    history: Vec<ai::ChatMessage>, // Accept the list of past messages from React
     provider: String,
     on_token: Channel<String>,
 ) -> Result<(), String> {
@@ -42,7 +42,7 @@ async fn ask_vyze(
     };
 
     // 2. Start the streaming request
-    let mut stream = ai_provider.stream_chat(&prompt);
+    let mut stream = ai_provider.stream_chat(&history);
 
     // 3. Listen to the stream and push tokens to the frontend channel as they arrive
     while let Some(result) = stream.next().await {

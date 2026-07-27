@@ -6,9 +6,17 @@ use tokio::sync::mpsc;
 // Type alias for pinned, thread-safe asynchronous streams
 pub type BoxStream<T> = Pin<Box<dyn Stream<Item = T> + Send>>;
 
-// Standard blueprint for any AI model provider
+// a message structure that we can read from React (JSON)
+#[derive(serde::Deserialize, Clone)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+// standard blueprint for any ai model provider
 pub trait AiProvider: Send + Sync {
-    fn stream_chat(&self, prompt: &str) -> BoxStream<Result<String, String>>;
+    // instead of a single prompt we now take a slice of previous chat messages
+    fn stream_chat(&self, history: &[ChatMessage]) -> BoxStream<Result<String, String>>;
 }
 
 // ==========================================
@@ -31,10 +39,10 @@ impl GeminiProvider {
 }
 
 impl AiProvider for GeminiProvider {
-    fn stream_chat(&self, prompt: &str) -> BoxStream<Result<String, String>> {
+    fn stream_chat(&self, history: &[ChatMessage]) -> BoxStream<Result<String, String>> {
         let api_key = self.api_key.clone();
         let model = self.model.clone();
-        let prompt = prompt.to_string();
+        let history = history.to_vec(); // Clone history to move into the async thread
         let (tx, rx) = mpsc::channel(100);
 
         tokio::spawn(async move {
@@ -44,16 +52,29 @@ impl AiProvider for GeminiProvider {
                 model, api_key
             );
 
-            let body = serde_json::json!({
-                "contents": [
-                    {
+            // Convert our standard ChatMessages into Google Gemini API format
+            let contents: Vec<serde_json::Value> = history
+                .iter()
+                .map(|msg| {
+                    // Gemini API specifically expects the bot's role to be named "model" (not "assistant")
+                    let role = if msg.role == "assistant" {
+                        "model"
+                    } else {
+                        "user"
+                    };
+                    serde_json::json!({
+                        "role": role,
                         "parts": [
                             {
-                                "text": prompt
+                                "text": msg.content
                             }
                         ]
-                    }
-                ]
+                    })
+                })
+                .collect();
+
+            let body = serde_json::json!({
+                "contents": contents
             });
 
             let res = match client.post(&url).json(&body).send().await {
@@ -142,24 +163,30 @@ impl OllamaProvider {
 }
 
 impl AiProvider for OllamaProvider {
-    fn stream_chat(&self, prompt: &str) -> BoxStream<Result<String, String>> {
+    fn stream_chat(&self, history: &[ChatMessage]) -> BoxStream<Result<String, String>> {
         let model = self.model.clone();
-        let prompt = prompt.to_string();
+        let history = history.to_vec(); // Clone history to move into the async thread
         let (tx, rx) = mpsc::channel(100);
 
         tokio::spawn(async move {
             let client = reqwest::Client::new();
             let url = "http://localhost:11434/v1/chat/completions";
 
-            // Construct standard OpenAI JSON payload
+            // Convert our standard ChatMessages into OpenAI/Ollama API format
+            let messages: Vec<serde_json::Value> = history
+                .iter()
+                .map(|msg| {
+                    serde_json::json!({
+                        "role": msg.role,
+                        "content": msg.content
+                    })
+                })
+                .collect();
+
+            // Construct standard OpenAI JSON payload with the full message history list
             let body = serde_json::json!({
                 "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
+                "messages": messages,
                 "stream": true
             });
 
