@@ -42,9 +42,8 @@ async fn ask_vyze(
     };
 
     // 2. Start the streaming request
-    let mut stream = ai_provider.stream_chat(&history);
-
-    // 3. Listen to the stream and push tokens to the frontend channel as they arrive
+    let mut stream = ai_provider.stream_chat(&history); // Pass history instead of a single prompt
+                                                        // 3. Listen to the stream and push tokens to the frontend channel as they arrive
     while let Some(result) = stream.next().await {
         match result {
             Ok(token) => {
