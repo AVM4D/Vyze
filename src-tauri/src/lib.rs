@@ -64,6 +64,32 @@ async fn ask_vyze(
     Ok(())
 }
 
+// A command that reads plain text from the system clipboard
+#[tauri::command]
+fn read_clipboard() -> Result<String, String> {
+    // Open a connection to the system clipboard
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| format!("Failed to open clipboard: {}", e))?;
+
+    // Read the text
+    clipboard
+        .get_text()
+        .map_err(|e| format!("Failed to read text from clipboard: {}", e))
+}
+
+// A command that writes text into the system clipboard
+#[tauri::command]
+fn write_clipboard(text: String) -> Result<(), String> {
+    // Open a connection to the system clipboard
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| format!("Failed to open clipboard: {}", e))?;
+
+    // Write the text
+    clipboard
+        .set_text(text)
+        .map_err(|e| format!("Failed to write text to clipboard: {}", e))
+}
+
 fn toggle_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let is_visible = window.is_visible().unwrap_or(false);
@@ -81,8 +107,13 @@ pub fn run() {
     dotenvy::dotenv().ok();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        // Register both greet AND ask_vyze commands
-        .invoke_handler(tauri::generate_handler![greet, ask_vyze])
+        // Register greet, ask_vyze, and clipboard commands
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            ask_vyze,
+            read_clipboard,
+            write_clipboard
+        ])
         .setup(|app| {
             // 1. System Tray setup
             let toggle = MenuItemBuilder::with_id("toggle", "Toggle Vyze").build(app)?;
