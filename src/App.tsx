@@ -1,41 +1,76 @@
-import { useState } from "react";
-import { invoke, Channel } from "@tauri-apps/api/core"; // 1. Added Channel to our imports
+import { useState, useRef, useEffect } from "react";
+import { invoke, Channel } from "@tauri-apps/api/core";
 import "./App.css";
 
-// This is our main React screen
+// 1. Define what a Message looks like
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
 function App() {
   const [prompt, setPrompt] = useState("");
-  const [response, setResponse] = useState("Select a provider, set your key, and ask Vyze a question...");
+  // 2. Change response state to an array of messages
+  const [messages, setMessages] = useState<Message[]>([]);
   const [provider, setProvider] = useState("gemini");
   const [isLoading, setIsLoading] = useState(false);
+  // Create a reference pointer pointing to the bottom of the chat list
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Scroll to the bottom of the chat container whenever messages list changes
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!prompt.trim()) return;
 
+    // A. Create the user's message object
+    const userMsg: Message = { role: "user", content: prompt };
+
+    // B. Create the new history list, adding a blank bot message at the end
+    const newHistory = [...messages, userMsg];
+    setMessages([...newHistory, { role: "assistant", content: "" }]);
+    setPrompt(""); // Clear input box immediately
     setIsLoading(true);
-    setResponse(""); // Clear text to prepare for incoming stream
 
     try {
-      // 2. Create a new Channel envelope, giving it our update callback function
       const tokenChannel = new Channel<string>();
 
-      // When a message (token) arrives from Rust, append it to the screen
+      // When a token arrives, append it to the LAST message (our blank assistant message)
       tokenChannel.onmessage = (token: string) => {
-        setResponse((prev) => prev + token);
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIdx = updated.length - 1;
+          if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
+            // Create a clean copy of the assistant message instead of mutating it directly
+            updated[lastIdx] = {
+              ...updated[lastIdx],
+              content: updated[lastIdx].content + token
+            };
+          }
+          return updated;
+        });
       };
 
-      // 3. Invoke ask_vyze and pass the channel envelope
+      // C. Call our Rust command, sending the history (without the blank bot message)
       await invoke("ask_vyze", {
-        prompt: prompt,
+        history: newHistory,
         provider: provider,
-        onToken: tokenChannel // Pass the channel instance
+        onToken: tokenChannel
       });
     } catch (err) {
-      setResponse(`Error: ${err}`);
+      // If an error happens, write it inside the bot's bubble
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        if (lastIdx >= 0) {
+          updated[lastIdx].content = `Error: ${err}`;
+        }
+        return updated;
+      });
     } finally {
       setIsLoading(false);
-      setPrompt(""); // Clear the text box
     }
   }
 
@@ -70,12 +105,26 @@ function App() {
             to toggle overlay visibility.
           </p>
 
-          {/* Response Box */}
-          <div className="response-card" style={{ overflowY: "auto", maxGain: "150px" }}>
-            {response}
+          {/* 3. Render the scrollable Chat List */}
+          <div className="chat-container">
+            {messages.length === 0 ? (
+              <div className="response-card" style={{ border: "none", background: "transparent", padding: 0, textAlign: "center", color: "#555555" }}>
+                Ask Vyze anything to start a conversation...
+              </div>
+            ) : (
+              messages.map((msg, index) => (
+                <div key={index} className={`message-row ${msg.role}`}>
+                  <div className={`chat-bubble ${msg.role}`}>
+                    {msg.content || "..."}
+                  </div>
+                </div>
+              ))
+            )}
+            {/* The scroll target anchor */}
+            <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Box */}
+          {/* Input Area */}
           <form onSubmit={handleSubmit} className="prompt-area">
             <input
               type="text"
@@ -86,7 +135,13 @@ function App() {
               disabled={isLoading}
             />
             <button type="submit" className="send-button" disabled={isLoading}>
-              {isLoading ? "..." : "Send"}
+              {isLoading ? (
+                <div className="dot-flashing">
+                  <div></div>
+                  <div></div>
+                  <div></div>
+                </div>
+              ) : "Send"}
             </button>
           </form>
         </div>

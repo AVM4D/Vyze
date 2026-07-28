@@ -191,7 +191,81 @@ body,
   transform: translateY(1px);
 }
 
-/* Text block for responses */
+/* The container for the entire list of messages */
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 140px;
+  /* Limits height so it fits inside our small window */
+}
+
+/* Scrollbar Customization (for a sleek dark look) */
+.chat-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.chat-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Individual message row */
+.message-row {
+  display: flex;
+  width: 100%;
+}
+
+.message-row.user {
+  justify-content: flex-end;
+  /* Align user messages to the right */
+}
+
+.message-row.assistant {
+  justify-content: flex-start;
+  /* Align assistant messages to the left */
+}
+
+/* The actual chat bubbles */
+.chat-bubble {
+  max-width: 85%;
+  padding: 8px 12px;
+  font-size: 0.8em;
+  line-height: 1.4;
+  border-radius: 12px;
+  word-wrap: break-word;
+}
+
+.chat-bubble.user {
+  background: rgba(99, 102, 241, 0.2);
+  /* Soft purple background */
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #e0e7ff;
+  border-bottom-right-radius: 3px;
+  /* Point bubble to the right */
+}
+
+.chat-bubble.assistant {
+  background: rgba(255, 255, 255, 0.03);
+  /* Soft gray background */
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #f3f4f6;
+  border-bottom-left-radius: 3px;
+  /* Point bubble to the left */
+}
+
+/* Fallback card placeholder */
 .response-card {
   background: rgba(255, 255, 255, 0.02);
   border-radius: 12px;
@@ -240,4 +314,41 @@ body,
 .provider-select option {
   background: #141414;
   color: #f3f4f6;
+}
+
+/* Animated bouncing loading dots */
+.dot-flashing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 12px;
+}
+
+.dot-flashing div {
+  width: 4px;
+  height: 4px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  animation: dotBounce 0.8s infinite alternate;
+}
+
+/* Offset the second and third dot animations to create a wave effect */
+.dot-flashing div:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.dot-flashing div:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes dotBounce {
+  0% {
+    opacity: 0.3;
+    transform: translateY(2px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
