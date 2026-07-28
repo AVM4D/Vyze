@@ -247,6 +247,11 @@ body,
   word-wrap: break-word;
 }
 
+/* Remove default margins from paragraphs rendered by markdown inside bubbles */
+.chat-bubble p {
+  margin: 0;
+}
+
 .chat-bubble.user {
   background: rgba(99, 102, 241, 0.2);
   /* Soft purple background */

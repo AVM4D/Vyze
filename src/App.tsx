@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import ReactMarkdown from "react-markdown"; // Import markdown parser
 import "./App.css";
 
 // 1. Define what a Message looks like
@@ -115,7 +116,17 @@ function App() {
               messages.map((msg, index) => (
                 <div key={index} className={`message-row ${msg.role}`}>
                   <div className={`chat-bubble ${msg.role}`}>
-                    {msg.content || "..."}
+                    {msg.content === "" && msg.role === "assistant" ? (
+                      // 1. If it's an empty assistant message, show our bouncing loading dots
+                      <div className="dot-flashing">
+                        <div style={{ backgroundColor: "#a5b4fc" }}></div>
+                        <div style={{ backgroundColor: "#a5b4fc" }}></div>
+                        <div style={{ backgroundColor: "#a5b4fc" }}></div>
+                      </div>
+                    ) : (
+                      // 2. Otherwise, parse the message as structured Markdown
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    )}
                   </div>
                 </div>
               ))
