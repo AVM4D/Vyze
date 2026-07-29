@@ -15,6 +15,22 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [provider, setProvider] = useState("gemini");
   const [isLoading, setIsLoading] = useState(false);
+
+  const [autoCopy, setAutoCopy] = useState(false); // Controls if Vyze auto-copies responses
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null); // Tracks which message was copied
+
+  // Helper: Copy a specific text back to the system clipboard
+  async function handleCopy(text: string, index: number) {
+    try {
+      await invoke("write_clipboard", { text });
+      setCopiedIndex(index); // Set the active copied index to trigger checkmark display
+      setTimeout(() => {
+        setCopiedIndex(null); // Reset back to clipboard icon after 1.5 seconds
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to copy to clipboard:", err);
+    }
+  }
   // Create a reference pointer pointing to the bottom of the chat list
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -37,9 +53,11 @@ function App() {
 
     try {
       const tokenChannel = new Channel<string>();
+      let fullResponse = ""; // Accumulates the full response text for auto-copying
 
       // When a token arrives, append it to the LAST message (our blank assistant message)
       tokenChannel.onmessage = (token: string) => {
+        fullResponse += token; // Append token to our local tracker string
         setMessages((prev) => {
           const updated = [...prev];
           const lastIdx = updated.length - 1;
@@ -60,6 +78,11 @@ function App() {
         provider: provider,
         onToken: tokenChannel
       });
+
+      // D. Auto-copy the response text to the system clipboard if checked
+      if (autoCopy && fullResponse.trim()) {
+        await invoke("write_clipboard", { text: fullResponse });
+      }
     } catch (err) {
       // If an error happens, write it inside the bot's bubble
       setMessages((prev) => {
@@ -85,26 +108,42 @@ function App() {
             <span className="hud-title">VYZE</span>
           </div>
 
-          <div className="provider-select-container">
-            <select
-              className="provider-select"
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              disabled={isLoading}
-            >
-              <option value="gemini">Gemini (Cloud)</option>
-              <option value="ollama">Ollama (Local)</option>
-            </select>
+          {/* Controls Section (Model + Auto-Copy) */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            {/* Auto-Copy Toggle Switch */}
+            <label className="autocopy-container">
+              <input
+                type="checkbox"
+                className="autocopy-checkbox"
+                checked={autoCopy}
+                onChange={(e) => setAutoCopy(e.target.checked)}
+              />
+              <span>Auto-Copy</span>
+            </label>
+
+            <div className="provider-select-container">
+              <select
+                className="provider-select"
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
+                disabled={isLoading}
+              >
+                <option value="gemini">Gemini (Cloud)</option>
+                <option value="ollama">Ollama (Local)</option>
+              </select>
+            </div>
           </div>
         </div>
 
         {/* Content */}
         <div className="hud-content">
-          <p className="welcome-text">
-            Always-on desktop copilot. Currently listening globally for
-            <code style={{ background: "rgba(255,255,255,0.06)", padding: "2px 6px", borderRadius: "4px", marginLeft: "4px", marginRight: "4px", fontFamily: "monospace" }}>Ctrl + Space</code>
-            to toggle overlay visibility.
-          </p>
+          {messages.length === 0 && (
+            <p className="welcome-text">
+              Always-on desktop copilot. Currently listening globally for
+              <code style={{ background: "rgba(255,255,255,0.06)", padding: "2px 6px", borderRadius: "4px", marginLeft: "4px", marginRight: "4px", fontFamily: "monospace" }}>Ctrl + Space</code>
+              to toggle overlay visibility.
+            </p>
+          )}
 
           {/* 3. Render the scrollable Chat List */}
           <div className="chat-container">
@@ -117,15 +156,26 @@ function App() {
                 <div key={index} className={`message-row ${msg.role}`}>
                   <div className={`chat-bubble ${msg.role}`}>
                     {msg.content === "" && msg.role === "assistant" ? (
-                      // 1. If it's an empty assistant message, show our bouncing loading dots
                       <div className="dot-flashing">
                         <div style={{ backgroundColor: "#a5b4fc" }}></div>
                         <div style={{ backgroundColor: "#a5b4fc" }}></div>
                         <div style={{ backgroundColor: "#a5b4fc" }}></div>
                       </div>
                     ) : (
-                      // 2. Otherwise, parse the message as structured Markdown
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <>
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        {/* If it's an assistant bubble and not empty, add a copy button */}
+                        {msg.role === "assistant" && (
+                          <button
+                            className="copy-button"
+                            type="button"
+                            onClick={() => handleCopy(msg.content, index)}
+                            title="Copy response"
+                          >
+                            {copiedIndex === index ? "✅" : "📋"}
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -157,12 +207,14 @@ function App() {
           </form>
         </div>
 
-        <div className="footer-hint">
-          Right-click tray icon to Toggle or Exit.
+          <div className="footer-hint">
+            Right-click tray icon to Toggle or Exit.
+          </div>
         </div>
       </div>
-    </div>
-  );
+      );
 }
 
-export default App;
+      export default App;
+
+

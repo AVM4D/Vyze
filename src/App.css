@@ -44,7 +44,7 @@ body,
   border: 1px solid rgba(255, 255, 255, 0.08);
   /* Tiny subtle white border */
   border-radius: 8px;
-  padding: 24px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -72,9 +72,9 @@ body,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  padding-bottom: 12px;
+  padding-bottom: 6px;
 }
 
 .logo-section {
@@ -127,7 +127,9 @@ body,
 .hud-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
+  flex: 1;
+  overflow: hidden;
 }
 
 .welcome-text {
@@ -146,6 +148,7 @@ body,
   border-radius: 12px;
   padding: 4px 4px 4px 14px;
   transition: border-color 0.2s, box-shadow 0.2s;
+  margin-top: auto; /* Pushes the input bar to the bottom of the card */
 }
 
 .prompt-area:focus-within {
@@ -198,9 +201,8 @@ body,
   padding-right: 4px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: 140px;
-  /* Limits height so it fits inside our small window */
+  gap: 8px;
+  /* Stretches to fill all remaining vertical space under the header */
 }
 
 /* Scrollbar Customization (for a sleek dark look) */
@@ -239,6 +241,7 @@ body,
 
 /* The actual chat bubbles */
 .chat-bubble {
+  position: relative; /* Anchor for absolute copy button */
   max-width: 85%;
   padding: 8px 12px;
   font-size: 0.8em;
@@ -268,6 +271,7 @@ body,
   color: #f3f4f6;
   border-bottom-left-radius: 3px;
   /* Point bubble to the left */
+  padding-right: 32px; /* Give space for the absolute copy icon on the right */
 }
 
 /* Fallback card placeholder */
@@ -356,4 +360,65 @@ body,
     opacity: 1;
     transform: translateY(-2px);
   }
+}
+
+
+/* Container for the auto-copy toggle in the header */
+.autocopy-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7em;
+  color: #9ca3af;
+  cursor: pointer;
+  user-select: none;
+}
+
+.autocopy-checkbox {
+  width: 13px;
+  height: 13px;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+
+/* Paste icon button inside the input field bar */
+.paste-button {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 1.1em;
+  cursor: pointer;
+  padding: 0 8px 0 0;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  user-select: none;
+  display: flex;
+  align-items: center;
+}
+
+.paste-button:hover {
+  opacity: 1;
+}
+
+/* Copy button inside assistant bubbles (positioned absolutely in top-right) */
+.copy-button {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 0.9em; /* Emoji sizing */
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.2s;
+  padding: 2px;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-button:hover {
+  opacity: 1;
 }
