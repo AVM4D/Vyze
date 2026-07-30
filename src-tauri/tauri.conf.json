@@ -14,15 +14,16 @@
       {
         "label": "main",
         "title": "Vyze",
-        "width": 550,
-        "height": 320,
+        "width": 360,
+        "height": 280,
         "decorations": false,
         "transparent": true,
-        "shadow": true,
+        "shadow": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
-        "center": true
+        "center": false,
+        "resizable": false
       }
     ],
     "security": {

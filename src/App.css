@@ -1,229 +1,271 @@
-/* Make absolutely sure all parent elements are 100% transparent and have no default borders */
-html,
-body,
-#root {
-  background: transparent !important;
-  background-color: transparent !important;
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;800&display=swap');
+
+/* --- Reset & Base Variables --- */
+body, html {
   margin: 0;
   padding: 0;
-  width: 100vw;
-  height: 100vh;
   overflow: hidden;
-  box-sizing: border-box;
+  background: transparent;
+  font-family: 'Space Grotesk', sans-serif;
+  color: #ffffff;
+  height: 100%;
 }
 
-/* Center our React app content on the screen */
-#root {
+/* Custom highlight selection coloring */
+::selection {
+  background-color: #ff66b2 !important;
+  color: #1c1822 !important;
+}
+
+/* --- Container & Main Card (TV Girl Album Sleeve Chassis) --- */
+.hud-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  color: #ffffff;
-}
-
-.hud-container {
-  display: flex;
-  flex-direction: column;
   width: 100vw;
   height: 100vh;
+  padding: 10px;
   box-sizing: border-box;
-  padding: 0px;
-  /* Card fills the window bounds exactly */
 }
 
-/* The glass card */
 .hud-card {
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  background: rgba(20, 20, 20, 0.75);
-  /* 75% dark gray, 25% transparent */
-  backdrop-filter: blur(24px) saturate(190%);
-  /* Frosty blur effect */
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  /* Tiny subtle white border */
-  border-radius: 8px;
-  padding: 12px 16px;
+  width: 340px;
+  height: 260px;
+  background-color: #222225; /* Light shade of black */
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 10px 10px; /* Fine white digital grid lines */
+  border: 3px solid #1c1822;
+  box-shadow: 6px 6px 0px #38bdf8; /* Flat TV Girl Sky Blue shadow */
+  border-radius: 6px;
+  padding: 22px 10px 10px 10px; /* Top padding for overlapping sticker tab */
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+  position: relative;
   justify-content: space-between;
-  box-shadow:
-    0 10px 40px rgba(0, 0, 0, 0.5),
-    0 1px 0 rgba(255, 255, 255, 0.1) inset,
-    0 0 40px rgba(99, 102, 241, 0.05);
-  /* Subtle violet glow */
-  color: #f3f4f6;
-  text-align: left;
-  transform: scale(0.97);
-  opacity: 0;
-  animation: floatIn 0.4s forwards cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 6px;
 }
 
-/* Smooth float-up fade-in animation on load */
-@keyframes floatIn {
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
+/* --- Overlapping TV Girl Sticker Tab (Pink + Cyan/Black Stripes) --- */
 .hud-header {
+  position: absolute;
+  top: -16px;
+  left: 12px;
+  background: #ff66b2; /* TV Girl Saturated Pink */
+  border: 3px solid #1c1822;
+  box-shadow: 3px 3px 0px #1c1822;
+  padding: 2px 8px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  padding-bottom: 6px;
+  gap: 8px;
+  z-index: 10;
+  border-radius: 3px;
+  transform: rotate(-1deg);
 }
 
-.logo-section {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Pulsing Status Dot */
-.logo-glow {
-  width: 10px;
+/* Diagonal Stripes (Magenta and Sky Blue) */
+.hud-header::before {
+  content: "";
+  width: 15px;
   height: 10px;
-  background: #6366f1;
-  /* Purple/Indigo */
-  border-radius: 50%;
-  box-shadow: 0 0 8px #6366f1;
-  animation: pulse 2s infinite alternate;
+  background: repeating-linear-gradient(
+    -45deg,
+    #38bdf8,
+    #38bdf8 3px,
+    #ff66b2 3px,
+    #ff66b2 6px
+  );
+  border: 1px solid #1c1822;
+  border-radius: 1px;
 }
 
-@keyframes pulse {
-  0% {
-    transform: scale(0.95);
-    box-shadow: 0 0 6px #6366f1;
-  }
-
-  100% {
-    transform: scale(1.15);
-    box-shadow: 0 0 16px #6366f1, 0 0 20px rgba(99, 102, 241, 0.4);
-  }
+.hud-brand {
+  display: flex;
+  align-items: center;
 }
 
 .hud-title {
-  font-size: 1.1em;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: #ffffff;
-}
-
-.status-badge {
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 0.7em;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  border: 1px solid rgba(99, 102, 241, 0.25);
-}
-
-.hud-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1;
-  overflow: hidden;
-}
-
-.welcome-text {
+  font-weight: 800;
   font-size: 0.85em;
-  color: #9ca3af;
-  line-height: 1.5;
-  margin: 0;
+  color: #1c1822;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
 }
 
-/* Prompt input field container */
-.prompt-area {
+/* --- Controls Bar --- */
+.controls-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding-bottom: 4px;
+  border-bottom: 2px dashed rgba(255, 255, 255, 0.15);
+  margin-bottom: 2px;
+}
+
+/* --- Select Dropdown --- */
+.provider-select-container {
+  position: relative;
+}
+
+.provider-select {
+  background: #38bdf8; /* TV Girl Blue dial */
+  border: 2px solid #1c1822;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.65em;
+  font-weight: 800;
+  color: #1c1822;
+  outline: none;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px #1c1822;
+  transition: transform 0.05s, box-shadow 0.05s;
+}
+
+.provider-select:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2.5px 2.5px 0px #1c1822;
+}
+
+.provider-select:active {
+  transform: translate(1.5px, 1.5px);
+  box-shadow: 0.5px 0.5px 0px #1c1822;
+}
+
+/* --- Auto-Copy Toggle Switch --- */
+.autocopy-container {
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 4px 4px 4px 14px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  margin-top: auto; /* Pushes the input bar to the bottom of the card */
-}
-
-.prompt-area:focus-within {
-  border-color: rgba(99, 102, 241, 0.4);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.prompt-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #ffffff;
-  padding: 10px 0;
-  font-size: 0.9em;
-}
-
-.prompt-input::placeholder {
-  color: #555555;
-}
-
-/* Send button */
-.send-button {
-  background: #6366f1;
-  color: white;
-  border: none;
-  outline: none;
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-size: 0.85em;
-  font-weight: 600;
+  gap: 5px;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  font-size: 0.68em;
+  font-weight: 800;
+  color: #a1a1aa;
+  user-select: none;
 }
 
-.send-button:hover {
-  background: #4f46e5;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+.autocopy-checkbox {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #1c1822;
+  background: #ffffff;
+  cursor: pointer;
+  position: relative;
+  border-radius: 2px;
+  box-shadow: 1px 1px 0px #1c1822;
 }
 
-.send-button:active {
-  transform: translateY(1px);
+.autocopy-checkbox:checked {
+  background: #ff66b2; /* Saturated Pink check */
 }
 
-/* The container for the entire list of messages */
-.chat-container {
+.autocopy-checkbox:checked::after {
+  content: "✓";
+  position: absolute;
+  top: -3px;
+  left: 1px;
+  font-size: 8px;
+  color: #ffffff;
+  font-weight: 900;
+}
+
+/* --- Main Content --- */
+.hud-content {
   flex: 1;
-  overflow-y: auto;
-  padding-right: 4px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  /* Stretches to fill all remaining vertical space under the header */
+  overflow: hidden;
+  gap: 4px;
 }
 
-/* Scrollbar Customization (for a sleek dark look) */
-.chat-container::-webkit-scrollbar {
-  width: 4px;
-}
-
-.chat-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.chat-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+/* --- Instructions text --- */
+.welcome-text {
+  font-size: 0.65em;
+  color: #cbd5e1;
+  line-height: 1.35;
+  margin: 2px 0;
+  padding: 6px;
+  background: #161619 !important; /* Solid dark carbon background */
+  border: 2px solid #1c1822;
+  box-shadow: 2px 2px 0px #1c1822;
   border-radius: 4px;
 }
 
-.chat-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+/* --- Pink Context Banner --- */
+.context-box {
+  background: #ff66b2 !important; /* TV Girl Saturated Pink background */
+  color: #1c1822 !important;
+  border: 2px solid #1c1822;
+  box-shadow: 2px 2px 0px #1c1822;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.65em;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  animation: popIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* Individual message row */
+.context-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.context-label {
+  font-weight: 800;
+  color: #1c1822;
+  letter-spacing: 0.5px;
+}
+
+.context-clear-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #1c1822;
+  cursor: pointer;
+  font-size: 1.1em;
+  font-weight: 900;
+}
+
+.context-body {
+  color: #1c1822 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  font-style: italic;
+}
+
+/* --- Chat Container --- */
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Custom Scrollbar */
+.chat-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-container::-webkit-scrollbar-track {
+  background: #2a2533;
+}
+
+.chat-container::-webkit-scrollbar-thumb {
+  background: #ff66b2;
+  border: 1.5px solid #1c1822;
+}
+
+/* --- Chat Rows & Bubbles --- */
 .message-row {
   display: flex;
   width: 100%;
@@ -231,194 +273,197 @@ body,
 
 .message-row.user {
   justify-content: flex-end;
-  /* Align user messages to the right */
 }
 
 .message-row.assistant {
   justify-content: flex-start;
-  /* Align assistant messages to the left */
 }
 
-/* The actual chat bubbles */
 .chat-bubble {
-  position: relative; /* Anchor for absolute copy button */
-  max-width: 85%;
-  padding: 8px 12px;
-  font-size: 0.8em;
-  line-height: 1.4;
-  border-radius: 12px;
+  position: relative;
+  max-width: 88%;
+  padding: 6px 10px;
+  font-size: 0.7em;
+  line-height: 1.35;
   word-wrap: break-word;
+  font-weight: 600;
+  border: 2px solid #1c1822;
 }
 
-/* Remove default margins from paragraphs rendered by markdown inside bubbles */
 .chat-bubble p {
   margin: 0;
 }
 
+/* User Bubble: Crooked Saturated Pink Sticky Note */
 .chat-bubble.user {
-  background: rgba(99, 102, 241, 0.2);
-  /* Soft purple background */
-  border: 1px solid rgba(99, 102, 241, 0.35);
-  color: #e0e7ff;
-  border-bottom-right-radius: 3px;
-  /* Point bubble to the right */
+  background: #ff66b2; /* TV Girl Pink */
+  color: #1c1822;
+  box-shadow: 2px 2px 0px #1c1822;
+  border-radius: 2px;
+  transform: rotate(-1.5deg); /* Physical tape skew effect */
 }
 
+/* Assistant Bubble: Dark Tape with Fuchsia Border */
 .chat-bubble.assistant {
-  background: rgba(255, 255, 255, 0.03);
-  /* Soft gray background */
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  color: #f3f4f6;
-  border-bottom-left-radius: 3px;
-  /* Point bubble to the left */
-  padding-right: 32px; /* Give space for the absolute copy icon on the right */
+  background: #38bdf8 !important; /* TV Girl Sky Blue */
+  border: 2px solid #1c1822; /* Clean black border */
+  box-shadow: 2px 2px 0px #1c1822;
+  border-radius: 4px;
+  padding-right: 24px; /* Space for the absolute copy icon */
 }
 
-/* Fallback card placeholder */
-.response-card {
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 12px;
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.03);
-  font-size: 0.85em;
-  line-height: 1.5;
-  color: #d1d5db;
-  min-height: 48px;
+/* Force black text color inside assistant bubble for absolute legibility */
+.chat-bubble.assistant,
+.chat-bubble.assistant p,
+.chat-bubble.assistant span,
+.chat-bubble.assistant li,
+.chat-bubble.assistant strong {
+  color: #1c1822 !important;
 }
 
-.footer-hint {
-  font-size: 0.7em;
-  color: #555555;
-  text-align: center;
-  margin-top: 14px;
-}
-
-/* Custom styled dropdown container */
-.provider-select-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Custom styled dropdown select element */
-.provider-select {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #f3f4f6;
-  padding: 6px 12px;
-  border-radius: 10px;
-  font-size: 0.8em;
-  font-weight: 500;
-  outline: none;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.provider-select:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(99, 102, 241, 0.4);
-}
-
-/* Style the dropdown options (browser-native menu) */
-.provider-select option {
-  background: #141414;
-  color: #f3f4f6;
-}
-
-/* Animated bouncing loading dots */
-.dot-flashing {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 12px;
-}
-
-.dot-flashing div {
-  width: 4px;
-  height: 4px;
-  background-color: #ffffff;
-  border-radius: 50%;
-  animation: dotBounce 0.8s infinite alternate;
-}
-
-/* Offset the second and third dot animations to create a wave effect */
-.dot-flashing div:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.dot-flashing div:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-@keyframes dotBounce {
-  0% {
-    opacity: 0.3;
-    transform: translateY(2px);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
-}
-
-
-/* Container for the auto-copy toggle in the header */
-.autocopy-container {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.7em;
-  color: #9ca3af;
-  cursor: pointer;
-  user-select: none;
-}
-
-.autocopy-checkbox {
-  width: 13px;
-  height: 13px;
-  accent-color: #6366f1;
-  cursor: pointer;
-}
-
-/* Paste icon button inside the input field bar */
-.paste-button {
-  background: transparent;
-  border: none;
-  outline: none;
-  font-size: 1.1em;
-  cursor: pointer;
-  padding: 0 8px 0 0;
-  opacity: 0.5;
-  transition: opacity 0.2s;
-  user-select: none;
-  display: flex;
-  align-items: center;
-}
-
-.paste-button:hover {
-  opacity: 1;
-}
-
-/* Copy button inside assistant bubbles (positioned absolutely in top-right) */
+/* Bubble Copy Button */
 .copy-button {
   position: absolute;
-  top: 6px;
-  right: 8px;
-  background: transparent;
-  border: none;
-  outline: none;
-  font-size: 0.9em; /* Emoji sizing */
+  top: 4px;
+  right: 4px;
+  background: #ff66b2; /* TV Girl Saturated Pink button overlay */
+  border: 1.5px solid #1c1822;
+  box-shadow: 1px 1px 0px #1c1822;
+  font-size: 0.85em;
   cursor: pointer;
-  opacity: 0.35;
-  transition: opacity 0.2s;
-  padding: 2px;
-  user-select: none;
+  padding: 1px 3px;
+  border-radius: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.05s, box-shadow 0.05s;
+  user-select: none;
+  color: #1c1822;
 }
 
 .copy-button:hover {
-  opacity: 1;
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 1.5px 1.5px 0px #1c1822;
+}
+
+.copy-button:active {
+  transform: translate(1px, 1px);
+  box-shadow: 0px 0px 0px #1c1822;
+}
+
+/* --- Prompt Input Field (Retro Console Deck) --- */
+.prompt-area {
+  display: flex;
+  align-items: center;
+  background: #1c1921; /* Dark Grape-black */
+  border: 2px solid #1c1822;
+  border-radius: 4px;
+  padding: 2px 2px 2px 8px;
+  box-shadow: 3px 3px 0px #1c1822;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  margin-top: auto;
+}
+
+.prompt-area:focus-within {
+  box-shadow: 3px 3px 0px #38bdf8; /* Glowing Blue focus accent */
+}
+
+.prompt-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.7em;
+  font-weight: 700;
+  color: #ff66b2; /* Saturated Pink typing text! */
+  padding: 4px 0;
+  caret-color: #38bdf8; /* Sky Blue cursor */
+}
+
+.prompt-input::placeholder {
+  color: #64748b;
+}
+
+.send-button {
+  background: #38bdf8; /* TV Girl Blue */
+  border: 2px solid #1c1822;
+  box-shadow: 2px 2px 0px #1c1822;
+  border-radius: 3px;
+  color: #1c1822;
+  cursor: pointer;
+  padding: 3px 8px;
+  margin-left: 4px;
+  font-size: 0.72em;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.05s, box-shadow 0.05s;
+  text-transform: uppercase;
+}
+
+.send-button:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2.5px 2.5px 0px #1c1822;
+}
+
+.send-button:active {
+  transform: translate(1.5px, 1.5px);
+  box-shadow: 0.5px 0.5px 0px #1c1822;
+}
+
+.send-button:disabled {
+  background: #64748b;
+  box-shadow: 0px 0px 0px #1c1822;
+  transform: none;
+  cursor: not-allowed;
+}
+
+/* --- Flashing Analog LED Indicators (Loader dots) --- */
+.dot-flashing {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+}
+
+.dot-flashing div {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid #1c1822;
+  animation: ledPulse 0.6s infinite alternate;
+}
+
+/* LED 1: Flashing MAGENTA PINK */
+.dot-flashing div:nth-child(1) {
+  background-color: #ff66b2 !important;
+  animation-delay: 0s;
+  box-shadow: 0 0 4px #ff66b2;
+}
+
+/* LED 2: Flashing YELLOW */
+.dot-flashing div:nth-child(2) {
+  background-color: #eab308 !important;
+  animation-delay: 0.2s;
+  box-shadow: 0 0 4px #eab308;
+}
+
+/* LED 3: Flashing SKY BLUE */
+.dot-flashing div:nth-child(3) {
+  background-color: #38bdf8 !important;
+  animation-delay: 0.4s;
+  box-shadow: 0 0 4px #38bdf8;
+}
+
+/* --- Animations --- */
+@keyframes popIn {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes ledPulse {
+  0% { opacity: 0.3; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1.1); }
 }
