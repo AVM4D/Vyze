@@ -467,3 +467,107 @@ body, html {
   0% { opacity: 0.3; transform: scale(0.8); }
   100% { opacity: 1; transform: scale(1.1); }
 }
+
+/* --- Voice Dictation UI Controls (TV Girl Theme) --- */
+.voice-toggle-btn {
+  background: #ff66b2; /* TV Girl Pink base */
+  border: 2px solid #1c1822;
+  box-shadow: 2px 2px 0px #1c1822;
+  border-radius: 4px;
+  color: #1c1822;
+  cursor: pointer;
+  padding: 1px 6px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.63em;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  text-transform: uppercase;
+  transition: transform 0.05s, box-shadow 0.05s, background-color 0.2s;
+  user-select: none;
+}
+
+.voice-toggle-btn.muted {
+  background: #475569; /* Muted Slate Gray */
+  color: #cbd5e1;
+  box-shadow: 2px 2px 0px #1c1822;
+}
+
+.voice-toggle-btn:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2.5px 2.5px 0px #1c1822;
+}
+
+.voice-toggle-btn:active {
+  transform: translate(1.5px, 1.5px);
+  box-shadow: 0.5px 0.5px 0px #1c1822;
+}
+
+/* Voice LED Status Dots */
+.voice-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid #1c1822;
+  display: inline-block;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+/* Cyan Glowing LED (Continuous background standby) */
+.voice-led.standby {
+  background-color: #38bdf8 !important;
+  box-shadow: 0 0 5px #38bdf8;
+  animation: ledPulse 1s infinite alternate;
+}
+
+/* Red Pulsing LED (Actively capturing user prompt speech) */
+.voice-led.dictating {
+  background-color: #ef4444 !important;
+  box-shadow: 0 0 6px #ef4444;
+  animation: ledPulse 0.3s infinite alternate; /* Fast pulsing warn */
+}
+
+/* Yellow Pulsing LED (AI is speaking the response aloud) */
+.voice-led.speaking {
+  background-color: #eab308 !important;
+  box-shadow: 0 0 5px #eab308;
+  animation: ledPulse 0.5s infinite alternate;
+}
+
+/* Dull Grey LED (Voice control disabled/muted) */
+.voice-led.disabled {
+  background-color: #94a3b8 !important;
+  box-shadow: none;
+}
+
+/* Stop Speech Button */
+.stop-speech-btn {
+  background: #ef4444; /* Alert red background */
+  border: 2px solid #1c1822;
+  box-shadow: 2px 2px 0px #1c1822;
+  border-radius: 3px;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 3px 8px;
+  margin-left: 4px;
+  font-size: 0.72em;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.05s, box-shadow 0.05s;
+  text-transform: uppercase;
+  user-select: none;
+  animation: ledPulse 0.6s infinite alternate; /* Dynamic pulsing alert! */
+}
+
+.stop-speech-btn:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2.5px 2.5px 0px #1c1822;
+}
+
+.stop-speech-btn:active {
+  transform: translate(1.5px, 1.5px);
+  box-shadow: 0.5px 0.5px 0px #1c1822;
+}

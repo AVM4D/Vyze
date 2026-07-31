@@ -231,6 +231,76 @@ fn toggle_window(app: &tauri::AppHandle) {
     }
 }
 
+#[tauri::command]
+fn show_main_window(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let window_clone = window.clone();
+        
+        // Fetch current cursor position
+        let mut point = POINT { x: 0, y: 0 };
+        let (cursor_x, cursor_y) = unsafe {
+            if GetCursorPos(&mut point).is_ok() {
+                (point.x, point.y)
+            } else {
+                (100, 100) // Safe fallback coordinate
+            }
+        };
+
+        // Window size dimensions (matching tauri.conf.json)
+        let win_width = 360;
+        let win_height = 280;
+
+        let mut monitor_x = 0;
+        let mut monitor_y = 0;
+        let mut monitor_width = 1920;
+        let mut monitor_height = 1080;
+
+        if let Ok(monitors) = app.available_monitors() {
+            for m in monitors {
+                let pos = m.position();
+                let size = m.size();
+                let start_x = pos.x;
+                let end_x = pos.x + size.width as i32;
+                let start_y = pos.y;
+                let end_y = pos.y + size.height as i32;
+
+                if cursor_x >= start_x && cursor_x <= end_x && cursor_y >= start_y && cursor_y <= end_y {
+                    monitor_x = pos.x;
+                    monitor_y = pos.y;
+                    monitor_width = size.width as i32;
+                    monitor_height = size.height as i32;
+                    break;
+                }
+            }
+        }
+
+        // Offset the popup slightly down and right from the cursor
+        let mut final_x = cursor_x + 12;
+        let mut final_y = cursor_y + 12;
+
+        if final_x + win_width > monitor_x + monitor_width {
+            final_x = cursor_x - win_width - 12;
+        }
+        if final_y + win_height > monitor_y + monitor_height {
+            final_y = cursor_y - win_height - 12;
+        }
+
+        if final_x < monitor_x { final_x = monitor_x + 10; }
+        if final_y < monitor_y { final_y = monitor_y + 10; }
+
+        // Position window at cursor
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(final_x, final_y)));
+
+        // Spawn a background capture task, show window, and emit the selection context
+        tauri::async_runtime::spawn(async move {
+            let selected_text = perform_capture().await;
+            let _ = window_clone.show();
+            let _ = window_clone.set_focus();
+            let _ = window_clone.emit("selection-captured", selected_text);
+        });
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     dotenvy::dotenv().ok();
@@ -242,7 +312,8 @@ pub fn run() {
             ask_vyze,
             read_clipboard,
             write_clipboard,
-            capture_selection
+            capture_selection,
+            show_main_window
         ])
         .setup(|app| {
             // 1. System Tray setup
