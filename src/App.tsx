@@ -83,12 +83,13 @@ function App() {
     const systemVoices = window.speechSynthesis.getVoices();
     console.log("System voices inventory loaded by browser:", systemVoices.map(v => `${v.name} (default: ${v.default})`));
     
-    // 1. Search for Prabhat/Prabahat or Ava (case-insensitive)
+    // 1. Search for Prabhat/Prabahat, Ava, or Mark (case-insensitive)
     const targetVoice = systemVoices.find(
       (v) =>
         v.name.toLowerCase().includes("prabhat") ||
         v.name.toLowerCase().includes("prabahat") ||
-        v.name.toLowerCase().includes("ava")
+        v.name.toLowerCase().includes("ava") ||
+        v.name.toLowerCase().includes("mark")
     );
 
     if (targetVoice) {
