@@ -1,9 +1,9 @@
 mod ai;
 
-use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
-use windows::Win32::Foundation::POINT;
 use base64::prelude::*;
 use std::io::Cursor;
+use windows::Win32::Foundation::POINT;
+use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use enigo::{
     Direction::{Click, Press, Release},
@@ -122,7 +122,8 @@ async fn perform_capture() -> String {
         let _ = enigo.key(Key::Control, Press);
         let _ = enigo.key(Key::Unicode('c'), Click);
         let _ = enigo.key(Key::Control, Release);
-    }).await;
+    })
+    .await;
 
     // 4. Sleep to allow the OS and application to process copy command
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -147,27 +148,41 @@ async fn capture_selection() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn capture_active_screen() -> Result<String, String> {
-    // 1. Fetch current cursor position
+async fn capture_active_screen(window: tauri::WebviewWindow) -> Result<String, String> {
+    // 1. Hide the Vyze window first so it doesn't appear in the screenshot
+    let _ = window.hide();
+
+    // Wait 150ms for the hide window animation to finish
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    // 2. Fetch current cursor position
     let mut point = POINT { x: 0, y: 0 };
     let (cursor_x, cursor_y) = unsafe {
         if GetCursorPos(&mut point).is_ok() {
             (point.x, point.y)
         } else {
-            (0, 0) // Default fallback coordinate
+            (0, 0)
         }
     };
 
-    // 2. Query all active monitors via xcap
+    // 3. Query all active monitors
     let monitors = xcap::Monitor::all().map_err(|e| format!("Failed to query monitors: {}", e))?;
-    
-    // 3. Find monitor containing mouse cursor coordinate
+
+    // 4. Find monitor containing mouse cursor coordinate
     let mut active_monitor = None;
     for m in monitors {
-        let start_x = m.x().map_err(|e| format!("Failed to read monitor X: {}", e))?;
-        let width = m.width().map_err(|e| format!("Failed to read monitor width: {}", e))?;
-        let start_y = m.y().map_err(|e| format!("Failed to read monitor Y: {}", e))?;
-        let height = m.height().map_err(|e| format!("Failed to read monitor height: {}", e))?;
+        let start_x = m
+            .x()
+            .map_err(|e| format!("Failed to read monitor X: {}", e))?;
+        let width = m
+            .width()
+            .map_err(|e| format!("Failed to read monitor width: {}", e))?;
+        let start_y = m
+            .y()
+            .map_err(|e| format!("Failed to read monitor Y: {}", e))?;
+        let height = m
+            .height()
+            .map_err(|e| format!("Failed to read monitor height: {}", e))?;
 
         let end_x = start_x + width as i32;
         let end_y = start_y + height as i32;
@@ -184,23 +199,43 @@ async fn capture_active_screen() -> Result<String, String> {
         None => {
             let all = xcap::Monitor::all().map_err(|e| e.to_string())?;
             if all.is_empty() {
+                // Show the window back in case of error
+                let _ = window.show();
+                let _ = window.set_focus();
                 return Err("No active displays found to capture".to_string());
             }
             all[0].clone()
         }
     };
 
-    // 4. Capture surface to raw RgbaImage
-    let image = monitor.capture_image().map_err(|e| format!("Direct surface capture failed: {}", e))?;
+    // 5. Capture surface
+    let image = match monitor.capture_image() {
+        Ok(img) => img,
+        Err(e) => {
+            // Show the window back in case of error
+            let _ = window.show();
+            let _ = window.set_focus();
+            return Err(format!("Direct surface capture failed: {}", e));
+        }
+    };
 
-    // 5. Compress RGBA buffer losslessly into PNG file bytes
+    // 6. Compress RGBA buffer directly to PNG bytes
     let mut png_bytes = Vec::new();
     let mut write_cursor = Cursor::new(&mut png_bytes);
-    image.write_to(&mut write_cursor, image::ImageFormat::Png)
-        .map_err(|e| format!("PNG encoding failure: {}", e))?;
+    if let Err(e) = image.write_to(&mut write_cursor, image::ImageFormat::Png) {
+        // Show the window back in case of error
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Err(format!("PNG encoding failure: {}", e));
+    }
 
-    // 6. Base64 serialize PNG binary to ASCII string payload
+    // 7. Base64 serialize PNG binary to ASCII text
     let base64_str = BASE64_STANDARD.encode(&png_bytes);
+
+    // 8. Bring the Vyze window back to the screen and focus it!
+    let _ = window.show();
+    let _ = window.set_focus();
+
     Ok(base64_str)
 }
 
@@ -242,7 +277,11 @@ fn toggle_window(app: &tauri::AppHandle) {
                     let end_y = pos.y + size.height as i32;
 
                     // Check if cursor point lies within this monitor's bounds
-                    if cursor_x >= start_x && cursor_x <= end_x && cursor_y >= start_y && cursor_y <= end_y {
+                    if cursor_x >= start_x
+                        && cursor_x <= end_x
+                        && cursor_y >= start_y
+                        && cursor_y <= end_y
+                    {
                         monitor_x = pos.x;
                         monitor_y = pos.y;
                         monitor_width = size.width as i32;
@@ -274,11 +313,17 @@ fn toggle_window(app: &tauri::AppHandle) {
             }
 
             // Hard clamp to this monitor's boundaries
-            if final_x < monitor_x { final_x = monitor_x + 10; }
-            if final_y < monitor_y { final_y = monitor_y + 10; }
+            if final_x < monitor_x {
+                final_x = monitor_x + 10;
+            }
+            if final_y < monitor_y {
+                final_y = monitor_y + 10;
+            }
 
             // Set the calculated position on the window
-            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(final_x, final_y)));
+            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
+                final_x, final_y,
+            )));
 
             // 4. Spawn selection capture background task, then show HUD
             tauri::async_runtime::spawn(async move {
@@ -295,7 +340,7 @@ fn toggle_window(app: &tauri::AppHandle) {
 fn show_main_window(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let window_clone = window.clone();
-        
+
         // Fetch current cursor position
         let mut point = POINT { x: 0, y: 0 };
         let (cursor_x, cursor_y) = unsafe {
@@ -324,7 +369,11 @@ fn show_main_window(app: tauri::AppHandle) {
                 let start_y = pos.y;
                 let end_y = pos.y + size.height as i32;
 
-                if cursor_x >= start_x && cursor_x <= end_x && cursor_y >= start_y && cursor_y <= end_y {
+                if cursor_x >= start_x
+                    && cursor_x <= end_x
+                    && cursor_y >= start_y
+                    && cursor_y <= end_y
+                {
                     monitor_x = pos.x;
                     monitor_y = pos.y;
                     monitor_width = size.width as i32;
@@ -345,11 +394,17 @@ fn show_main_window(app: tauri::AppHandle) {
             final_y = cursor_y - win_height - 12;
         }
 
-        if final_x < monitor_x { final_x = monitor_x + 10; }
-        if final_y < monitor_y { final_y = monitor_y + 10; }
+        if final_x < monitor_x {
+            final_x = monitor_x + 10;
+        }
+        if final_y < monitor_y {
+            final_y = monitor_y + 10;
+        }
 
         // Position window at cursor
-        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(final_x, final_y)));
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
+            final_x, final_y,
+        )));
 
         // Spawn a background capture task, show window, and emit the selection context
         tauri::async_runtime::spawn(async move {

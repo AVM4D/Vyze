@@ -183,24 +183,42 @@ impl AiProvider for OllamaProvider {
 
         tokio::spawn(async move {
             let client = reqwest::Client::new();
-            let url = "http://127.0.0.1:11434/v1/chat/completions";
+            let url = "http://127.0.0.1:11434/api/chat";
 
-            // Convert our standard ChatMessages into OpenAI/Ollama API format
+            // Convert our standard ChatMessages into Ollama API format
             let messages: Vec<serde_json::Value> = history
                 .iter()
                 .map(|msg| {
-                    serde_json::json!({
-                        "role": msg.role,
-                        "content": msg.content
-                    })
+                    if let Some(ref img) = msg.image_base64 {
+                        if !img.is_empty() {
+                            serde_json::json!({
+                                "role": msg.role,
+                                "content": msg.content,
+                                "images": [img]
+                            })
+                        } else {
+                            serde_json::json!({
+                                "role": msg.role,
+                                "content": msg.content
+                            })
+                        }
+                    } else {
+                        serde_json::json!({
+                            "role": msg.role,
+                            "content": msg.content
+                        })
+                    }
                 })
                 .collect();
 
-            // Construct standard OpenAI JSON payload with the full message history list
+            // Construct native Ollama JSON payload with options (8192 context size)
             let body = serde_json::json!({
                 "model": model,
                 "messages": messages,
-                "stream": true
+                "stream": true,
+                "options": {
+                    "num_ctx": 8192
+                }
             });
 
             // Send request to local Ollama port
@@ -214,7 +232,7 @@ impl AiProvider for OllamaProvider {
                 }
             };
 
-            // Handle errors (e.g. if the user didn't pull the Llama3 model first)
+            // Handle errors
             if !res.status().is_success() {
                 let status = res.status();
                 let err_text = res
@@ -243,24 +261,20 @@ impl AiProvider for OllamaProvider {
                                 let line = buffer[..newline_idx].trim().to_string();
                                 buffer.drain(..=newline_idx);
 
-                                if line.starts_with("data:") {
-                                    let json_str = line["data:".len()..].trim();
+                                if !line.is_empty() {
+                                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
+                                        let done = val["done"].as_bool().unwrap_or(false);
 
-                                    // Ollama sends [DONE] to signal completion
-                                    if json_str == "[DONE]" {
-                                        break;
-                                    }
-
-                                    // Parse choices[0].delta.content
-                                    if let Ok(val) =
-                                        serde_json::from_str::<serde_json::Value>(json_str)
-                                    {
-                                        if let Some(text_val) =
-                                            val["choices"][0]["delta"]["content"].as_str()
-                                        {
-                                            if tx.send(Ok(text_val.to_string())).await.is_err() {
-                                                break;
+                                        if let Some(text_val) = val["message"]["content"].as_str() {
+                                            if !text_val.is_empty() {
+                                                if tx.send(Ok(text_val.to_string())).await.is_err() {
+                                                    break;
+                                                }
                                             }
+                                        }
+
+                                        if done {
+                                            break;
                                         }
                                     }
                                 }

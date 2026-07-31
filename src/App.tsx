@@ -8,6 +8,7 @@ import "./App.css";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  image_base64?: string | null;
 }
 
 function App() {
@@ -24,6 +25,10 @@ function App() {
   const [voiceActive, setVoiceActive] = useState(true); // If background listening is enabled
   const [voiceState, setVoiceState] = useState<"standby" | "dictating" | "speaking">("standby");
   const voiceStateRef = useRef(voiceState);
+
+  // Screen Capture States
+  const [attachedImage, setAttachedImage] = useState<string | null>(null); // Holds the base64 screenshot text
+  const [isCapturing, setIsCapturing] = useState(false); // Shows if the app is taking a picture right now
 
   useEffect(() => {
     voiceStateRef.current = voiceState;
@@ -78,11 +83,11 @@ function App() {
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.volume = 1.0;
     utterance.rate = 1.0;
-    
+
     // Find the default system voice selected by the user in OS settings
     const systemVoices = window.speechSynthesis.getVoices();
     console.log("System voices inventory loaded by browser:", systemVoices.map(v => `${v.name} (default: ${v.default})`));
-    
+
     // 1. Search for Prabhat/Prabahat, Ava, or Mark (case-insensitive)
     const targetVoice = systemVoices.find(
       (v) =>
@@ -145,7 +150,7 @@ function App() {
 
       recognition.onresult = (event: any) => {
         if (voiceStateRef.current !== "standby") return;
-        
+
         // Scan through incoming speech stream segments immediately
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           const transcript = event.results[i][0].transcript.trim().toLowerCase();
@@ -182,12 +187,12 @@ function App() {
         if (voiceStateRef.current === "standby" && voiceActive) {
           try {
             recognition.stop();
-          } catch (e) {}
+          } catch (e) { }
           setTimeout(() => {
             if (voiceStateRef.current === "standby" && voiceActive) {
               try {
                 recognition.start();
-              } catch (e) {}
+              } catch (e) { }
             }
           }, 300);
         }
@@ -327,15 +332,20 @@ function App() {
   async function triggerSubmit(promptText: string) {
     if (!promptText.trim()) return;
 
-    // Create the clean bubble prompt shown on the screen
-    const userMsg: Message = { role: "user", content: promptText };
+    // Create the clean bubble prompt shown on the screen, holding the picture if attached
+    const userMsg: Message = {
+      role: "user",
+      content: promptText,
+      image_base64: attachedImage
+    };
 
     // Inject selection context into the payload history array sent to Rust/AI
     const userMsgWithContext: Message = {
       role: "user",
       content: selectedText
         ? `[Selected Text Context: "${selectedText}"]\n\n${promptText}`
-        : promptText
+        : promptText,
+      image_base64: attachedImage // Pass the picture payload here
     };
 
     const newHistory = [...messages, userMsg];
@@ -343,6 +353,7 @@ function App() {
 
     setMessages([...newHistory, { role: "assistant", content: "" }]);
     setSelectedText(""); // Clear selected context since it was consumed
+    setAttachedImage(null); // Clear screenshot after sending it!
     setIsLoading(true);
 
     try {
@@ -397,6 +408,33 @@ function App() {
       setIsLoading(false);
     }
   }
+
+  // Capture the monitor screen containing your mouse cursor
+  async function handleCaptureScreen() {
+    if (isCapturing) return;
+    setIsCapturing(true);
+
+    try {
+      // Call the Rust function we wrote to take a screenshot
+      const base64Screenshot = await invoke<string>("capture_active_screen");
+      setAttachedImage(base64Screenshot);
+      playBeep(); // Play a nice tactical chirp when captured successfully
+    } catch (err) {
+      console.error("Screen capture failed:", err);
+      // Append an error message to the chat so you know what went wrong
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `Failed to capture screen: ${err}`,
+          image_base64: null,
+        } as any
+      ]);
+    } finally {
+      setIsCapturing(false);
+    }
+  }
+
 
   // Voice dictation submit trigger
   function handleVoiceSubmit() {
@@ -509,6 +547,16 @@ function App() {
               messages.map((msg, index) => (
                 <div key={index} className={`message-row ${msg.role}`}>
                   <div className={`chat-bubble ${msg.role}`}>
+                    {/* Render the picture if this message has one attached */}
+                    {msg.image_base64 && (
+                      <div className="bubble-image-container">
+                        <img
+                          src={`data:image/png;base64,${msg.image_base64}`}
+                          alt="Screenshot context"
+                          className="bubble-image"
+                        />
+                      </div>
+                    )}
                     {msg.content === "" && msg.role === "assistant" ? (
                       <div className="dot-flashing">
                         <div></div>
@@ -538,6 +586,25 @@ function App() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Screenshot Preview Thumbnail Overlay */}
+          {attachedImage && (
+            <div className="screenshot-preview-container">
+              <img
+                src={`data:image/png;base64,${attachedImage}`}
+                alt="Captured screen preview"
+                className="screenshot-thumbnail"
+              />
+              <button
+                type="button"
+                className="detach-image-btn"
+                onClick={() => setAttachedImage(null)}
+                title="Remove screenshot"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Dark Console Command input field */}
           <form onSubmit={handleSubmit} className="prompt-area">
             <input
@@ -550,6 +617,17 @@ function App() {
               placeholder={provider === "gemini" ? "Ask Gemini..." : "Ask Ollama..."}
               disabled={isLoading || voiceState === "speaking"}
             />
+            {/* Camera Screen Capture Button */}
+            <button
+              type="button"
+              className={`capture-btn ${isCapturing ? "capturing" : ""}`}
+              onClick={handleCaptureScreen}
+              disabled={isLoading || isCapturing || voiceState === "speaking"}
+              title="Capture current screen"
+            >
+              {isCapturing ? "📸..." : "📸"}
+            </button>
+
             {voiceState === "speaking" ? (
               <button
                 type="button"

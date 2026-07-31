@@ -1,7 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;800&display=swap');
 
 /* --- Reset & Base Variables --- */
-body, html {
+body,
+html {
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -31,15 +32,19 @@ body, html {
 .hud-card {
   width: 340px;
   height: 260px;
-  background-color: #222225; /* Light shade of black */
-  background-image: 
+  background-color: #222225;
+  /* Light shade of black */
+  background-image:
     linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 10px 10px; /* Fine white digital grid lines */
+  background-size: 10px 10px;
+  /* Fine white digital grid lines */
   border: 3px solid #1c1822;
-  box-shadow: 6px 6px 0px #38bdf8; /* Flat TV Girl Sky Blue shadow */
+  box-shadow: 6px 6px 0px #38bdf8;
+  /* Flat TV Girl Sky Blue shadow */
   border-radius: 6px;
-  padding: 22px 10px 10px 10px; /* Top padding for overlapping sticker tab */
+  padding: 22px 10px 10px 10px;
+  /* Top padding for overlapping sticker tab */
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -53,7 +58,8 @@ body, html {
   position: absolute;
   top: -16px;
   left: 12px;
-  background: #ff66b2; /* TV Girl Saturated Pink */
+  background: #ff66b2;
+  /* TV Girl Saturated Pink */
   border: 3px solid #1c1822;
   box-shadow: 3px 3px 0px #1c1822;
   padding: 2px 8px;
@@ -70,13 +76,11 @@ body, html {
   content: "";
   width: 15px;
   height: 10px;
-  background: repeating-linear-gradient(
-    -45deg,
-    #38bdf8,
-    #38bdf8 3px,
-    #ff66b2 3px,
-    #ff66b2 6px
-  );
+  background: repeating-linear-gradient(-45deg,
+      #38bdf8,
+      #38bdf8 3px,
+      #ff66b2 3px,
+      #ff66b2 6px);
   border: 1px solid #1c1822;
   border-radius: 1px;
 }
@@ -111,7 +115,8 @@ body, html {
 }
 
 .provider-select {
-  background: #38bdf8; /* TV Girl Blue dial */
+  background: #38bdf8;
+  /* TV Girl Blue dial */
   border: 2px solid #1c1822;
   border-radius: 4px;
   padding: 1px 4px;
@@ -160,7 +165,8 @@ body, html {
 }
 
 .autocopy-checkbox:checked {
-  background: #ff66b2; /* Saturated Pink check */
+  background: #ff66b2;
+  /* Saturated Pink check */
 }
 
 .autocopy-checkbox:checked::after {
@@ -189,7 +195,8 @@ body, html {
   line-height: 1.35;
   margin: 2px 0;
   padding: 6px;
-  background: #161619 !important; /* Solid dark carbon background */
+  background: #161619 !important;
+  /* Solid dark carbon background */
   border: 2px solid #1c1822;
   box-shadow: 2px 2px 0px #1c1822;
   border-radius: 4px;
@@ -197,7 +204,8 @@ body, html {
 
 /* --- Pink Context Banner --- */
 .context-box {
-  background: #ff66b2 !important; /* TV Girl Saturated Pink background */
+  background: #ff66b2 !important;
+  /* TV Girl Saturated Pink background */
   color: #1c1822 !important;
   border: 2px solid #1c1822;
   box-shadow: 2px 2px 0px #1c1822;
@@ -296,20 +304,25 @@ body, html {
 
 /* User Bubble: Crooked Saturated Pink Sticky Note */
 .chat-bubble.user {
-  background: #ff66b2; /* TV Girl Pink */
+  background: #ff66b2;
+  /* TV Girl Pink */
   color: #1c1822;
   box-shadow: 2px 2px 0px #1c1822;
   border-radius: 2px;
-  transform: rotate(-1.5deg); /* Physical tape skew effect */
+  transform: rotate(-1.5deg);
+  /* Physical tape skew effect */
 }
 
 /* Assistant Bubble: Dark Tape with Fuchsia Border */
 .chat-bubble.assistant {
-  background: #38bdf8 !important; /* TV Girl Sky Blue */
-  border: 2px solid #1c1822; /* Clean black border */
+  background: #38bdf8 !important;
+  /* TV Girl Sky Blue */
+  border: 2px solid #1c1822;
+  /* Clean black border */
   box-shadow: 2px 2px 0px #1c1822;
   border-radius: 4px;
-  padding-right: 24px; /* Space for the absolute copy icon */
+  padding-right: 24px;
+  /* Space for the absolute copy icon */
 }
 
 /* Force black text color inside assistant bubble for absolute legibility */
@@ -326,7 +339,8 @@ body, html {
   position: absolute;
   top: 4px;
   right: 4px;
-  background: #ff66b2; /* TV Girl Saturated Pink button overlay */
+  background: #ff66b2;
+  /* TV Girl Saturated Pink button overlay */
   border: 1.5px solid #1c1822;
   box-shadow: 1px 1px 0px #1c1822;
   font-size: 0.85em;
@@ -355,7 +369,8 @@ body, html {
 .prompt-area {
   display: flex;
   align-items: center;
-  background: #1c1921; /* Dark Grape-black */
+  background: #1c1921;
+  /* Dark Grape-black */
   border: 2px solid #1c1822;
   border-radius: 4px;
   padding: 2px 2px 2px 8px;
@@ -365,7 +380,8 @@ body, html {
 }
 
 .prompt-area:focus-within {
-  box-shadow: 3px 3px 0px #38bdf8; /* Glowing Blue focus accent */
+  box-shadow: 3px 3px 0px #38bdf8;
+  /* Glowing Blue focus accent */
 }
 
 .prompt-input {
@@ -376,9 +392,11 @@ body, html {
   font-family: 'Space Grotesk', sans-serif;
   font-size: 0.7em;
   font-weight: 700;
-  color: #ff66b2; /* Saturated Pink typing text! */
+  color: #ff66b2;
+  /* Saturated Pink typing text! */
   padding: 4px 0;
-  caret-color: #38bdf8; /* Sky Blue cursor */
+  caret-color: #38bdf8;
+  /* Sky Blue cursor */
 }
 
 .prompt-input::placeholder {
@@ -386,7 +404,8 @@ body, html {
 }
 
 .send-button {
-  background: #38bdf8; /* TV Girl Blue */
+  background: #38bdf8;
+  /* TV Girl Blue */
   border: 2px solid #1c1822;
   box-shadow: 2px 2px 0px #1c1822;
   border-radius: 3px;
@@ -459,18 +478,33 @@ body, html {
 
 /* --- Animations --- */
 @keyframes popIn {
-  0% { transform: scale(0.95); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes ledPulse {
-  0% { opacity: 0.3; transform: scale(0.8); }
-  100% { opacity: 1; transform: scale(1.1); }
+  0% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
 }
 
 /* --- Voice Dictation UI Controls (TV Girl Theme) --- */
 .voice-toggle-btn {
-  background: #ff66b2; /* TV Girl Pink base */
+  background: #ff66b2;
+  /* TV Girl Pink base */
   border: 2px solid #1c1822;
   box-shadow: 2px 2px 0px #1c1822;
   border-radius: 4px;
@@ -489,7 +523,8 @@ body, html {
 }
 
 .voice-toggle-btn.muted {
-  background: #475569; /* Muted Slate Gray */
+  background: #475569;
+  /* Muted Slate Gray */
   color: #cbd5e1;
   box-shadow: 2px 2px 0px #1c1822;
 }
@@ -525,7 +560,8 @@ body, html {
 .voice-led.dictating {
   background-color: #ef4444 !important;
   box-shadow: 0 0 6px #ef4444;
-  animation: ledPulse 0.3s infinite alternate; /* Fast pulsing warn */
+  animation: ledPulse 0.3s infinite alternate;
+  /* Fast pulsing warn */
 }
 
 /* Yellow Pulsing LED (AI is speaking the response aloud) */
@@ -543,7 +579,8 @@ body, html {
 
 /* Stop Speech Button */
 .stop-speech-btn {
-  background: #ef4444; /* Alert red background */
+  background: #ef4444;
+  /* Alert red background */
   border: 2px solid #1c1822;
   box-shadow: 2px 2px 0px #1c1822;
   border-radius: 3px;
@@ -559,7 +596,8 @@ body, html {
   transition: transform 0.05s, box-shadow 0.05s;
   text-transform: uppercase;
   user-select: none;
-  animation: ledPulse 0.6s infinite alternate; /* Dynamic pulsing alert! */
+  animation: ledPulse 0.6s infinite alternate;
+  /* Dynamic pulsing alert! */
 }
 
 .stop-speech-btn:hover {
@@ -570,4 +608,107 @@ body, html {
 .stop-speech-btn:active {
   transform: translate(1.5px, 1.5px);
   box-shadow: 0.5px 0.5px 0px #1c1822;
+}
+
+/* --- Screen Capture & Vision Styles (TV Girl Theme) --- */
+
+/* Image inside the Chat Bubble */
+.bubble-image-container {
+  margin-bottom: 6px;
+  border: 1.5px solid #1c1822;
+  border-radius: 4px;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.bubble-image {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+  max-height: 120px;
+}
+
+/* Attached Image Preview container sitting above the prompt bar */
+.screenshot-preview-container {
+  position: relative;
+  display: inline-block;
+  margin: 6px 12px;
+  padding: 3px;
+  background: #ff66b2;
+  /* TV Girl Pink background outline */
+  border: 2px solid #1c1822;
+  box-shadow: 2.5px 2.5px 0px #1c1822;
+  border-radius: 4px;
+  transform: rotate(-1deg);
+  /* Crooked sticker style */
+  max-width: 120px;
+}
+
+.screenshot-thumbnail {
+  display: block;
+  max-width: 110px;
+  max-height: 70px;
+  border: 1px solid #1c1822;
+  border-radius: 2px;
+  object-fit: cover;
+}
+
+/* Red delete button on top-right of preview thumbnail */
+.detach-image-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #ef4444;
+  /* Warning red background */
+  color: white;
+  border: 1.5px solid #1c1822;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 1px 1px 0px #1c1822;
+}
+
+.detach-image-btn:hover {
+  transform: scale(1.1);
+}
+
+/* Camera button inside prompt bar */
+.capture-btn {
+  background: #ff66b2;
+  /* TV Girl Pink */
+  border: 2px solid #1c1822;
+  box-shadow: 2px 2px 0px #1c1822;
+  border-radius: 3px;
+  color: #1c1822;
+  cursor: pointer;
+  padding: 3px 8px;
+  margin-left: 4px;
+  font-size: 0.85em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.05s, box-shadow 0.05s;
+}
+
+.capture-btn:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2.5px 2.5px 0px #1c1822;
+}
+
+.capture-btn:active {
+  transform: translate(1.5px, 1.5px);
+  box-shadow: 0.5px 0.5px 0px #1c1822;
+}
+
+.capture-btn:disabled {
+  background: #64748b;
+  box-shadow: 0px 0px 0px #1c1822;
+  transform: none;
+  cursor: not-allowed;
 }
