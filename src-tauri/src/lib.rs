@@ -2,6 +2,8 @@ mod ai;
 
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use windows::Win32::Foundation::POINT;
+use base64::prelude::*;
+use std::io::Cursor;
 
 use enigo::{
     Direction::{Click, Press, Release},
@@ -142,6 +144,64 @@ async fn perform_capture() -> String {
 #[tauri::command]
 async fn capture_selection() -> Result<String, String> {
     Ok(perform_capture().await)
+}
+
+#[tauri::command]
+async fn capture_active_screen() -> Result<String, String> {
+    // 1. Fetch current cursor position
+    let mut point = POINT { x: 0, y: 0 };
+    let (cursor_x, cursor_y) = unsafe {
+        if GetCursorPos(&mut point).is_ok() {
+            (point.x, point.y)
+        } else {
+            (0, 0) // Default fallback coordinate
+        }
+    };
+
+    // 2. Query all active monitors via xcap
+    let monitors = xcap::Monitor::all().map_err(|e| format!("Failed to query monitors: {}", e))?;
+    
+    // 3. Find monitor containing mouse cursor coordinate
+    let mut active_monitor = None;
+    for m in monitors {
+        let start_x = m.x().map_err(|e| format!("Failed to read monitor X: {}", e))?;
+        let width = m.width().map_err(|e| format!("Failed to read monitor width: {}", e))?;
+        let start_y = m.y().map_err(|e| format!("Failed to read monitor Y: {}", e))?;
+        let height = m.height().map_err(|e| format!("Failed to read monitor height: {}", e))?;
+
+        let end_x = start_x + width as i32;
+        let end_y = start_y + height as i32;
+
+        if cursor_x >= start_x && cursor_x <= end_x && cursor_y >= start_y && cursor_y <= end_y {
+            active_monitor = Some(m);
+            break;
+        }
+    }
+
+    // Default to first monitor if cursor isn't in any screen boundaries
+    let monitor = match active_monitor {
+        Some(m) => m,
+        None => {
+            let all = xcap::Monitor::all().map_err(|e| e.to_string())?;
+            if all.is_empty() {
+                return Err("No active displays found to capture".to_string());
+            }
+            all[0].clone()
+        }
+    };
+
+    // 4. Capture surface to raw RgbaImage
+    let image = monitor.capture_image().map_err(|e| format!("Direct surface capture failed: {}", e))?;
+
+    // 5. Compress RGBA buffer losslessly into PNG file bytes
+    let mut png_bytes = Vec::new();
+    let mut write_cursor = Cursor::new(&mut png_bytes);
+    image.write_to(&mut write_cursor, image::ImageFormat::Png)
+        .map_err(|e| format!("PNG encoding failure: {}", e))?;
+
+    // 6. Base64 serialize PNG binary to ASCII string payload
+    let base64_str = BASE64_STANDARD.encode(&png_bytes);
+    Ok(base64_str)
 }
 
 fn toggle_window(app: &tauri::AppHandle) {
@@ -313,7 +373,8 @@ pub fn run() {
             read_clipboard,
             write_clipboard,
             capture_selection,
-            show_main_window
+            show_main_window,
+            capture_active_screen
         ])
         .setup(|app| {
             // 1. System Tray setup
