@@ -66,24 +66,19 @@ function App() {
     }
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.volume = 1.0;
+    utterance.rate = 1.0;
     
-    // Find the best voice directly at the moment of speech
+    // Find the default system voice selected by the user in OS settings
     const systemVoices = window.speechSynthesis.getVoices();
-    const coolVoice = systemVoices.find(
-      (v) =>
-        v.name.includes("Online (Natural)") || // Microsoft Edge online natural voices (highly realistic!)
-        v.name.includes("Google") ||           // Google natural web voices
-        v.name.includes("Natural") ||          // Siri / macOS natural voices
-        v.name.includes("Enhanced") ||         // Enhanced offline macOS voices
-        v.name.includes("Hazel") ||            // Smooth British Hazel accent
-        v.name.includes("George")              // Smooth British George accent
-    );
-
-    if (coolVoice) {
-      utterance.voice = coolVoice;
-      console.log("Speaking using natural voice:", coolVoice.name);
+    console.log("System voices inventory loaded by browser:", systemVoices.map(v => `${v.name} (default: ${v.default})`));
+    
+    const defaultVoice = systemVoices.find((v) => v.default === true);
+    if (defaultVoice) {
+      utterance.voice = defaultVoice;
+      console.log("Speaking using user's OS default voice:", defaultVoice.name);
     } else {
-      console.warn("No custom natural voice found, using system default.");
+      console.log("No custom default voice flag found, speaking with fallback default voice.");
     }
 
     setVoiceState("speaking");
