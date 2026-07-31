@@ -170,7 +170,7 @@ impl AiProvider for OllamaProvider {
 
         tokio::spawn(async move {
             let client = reqwest::Client::new();
-            let url = "http://localhost:11434/v1/chat/completions";
+            let url = "http://127.0.0.1:11434/v1/chat/completions";
 
             // Convert our standard ChatMessages into OpenAI/Ollama API format
             let messages: Vec<serde_json::Value> = history
