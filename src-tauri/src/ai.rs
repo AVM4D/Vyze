@@ -11,6 +11,7 @@ pub type BoxStream<T> = Pin<Box<dyn Stream<Item = T> + Send>>;
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    pub image_base64: Option<String>,
 }
 
 // standard blueprint for any ai model provider
@@ -52,23 +53,35 @@ impl AiProvider for GeminiProvider {
                 model, api_key
             );
 
-            // Convert our standard ChatMessages into Google Gemini API format
             let contents: Vec<serde_json::Value> = history
                 .iter()
                 .map(|msg| {
-                    // Gemini API specifically expects the bot's role to be named "model" (not "assistant")
                     let role = if msg.role == "assistant" {
                         "model"
                     } else {
                         "user"
                     };
+
+                    // Start with just the text part
+                    let mut parts = vec![serde_json::json!({
+                        "text": msg.content
+                    })];
+
+                    // If a picture is attached, add it to the parts list!
+                    if let Some(ref img) = msg.image_base64 {
+                        if !img.is_empty() {
+                            parts.push(serde_json::json!({
+                                "inlineData": {
+                                    "mimeType": "image/png",
+                                    "data": img
+                                }
+                            }));
+                        }
+                    }
+
                     serde_json::json!({
                         "role": role,
-                        "parts": [
-                            {
-                                "text": msg.content
-                            }
-                        ]
+                        "parts": parts
                     })
                 })
                 .collect();
