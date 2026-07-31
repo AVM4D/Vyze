@@ -29,6 +29,16 @@ function App() {
     voiceStateRef.current = voiceState;
   }, [voiceState]);
 
+  // Warm up system voices inventory on boot
+  useEffect(() => {
+    window.speechSynthesis.getVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
+  }, []);
+
   // Audio tactical synth wake beep helper
   function playBeep() {
     try {
@@ -73,12 +83,26 @@ function App() {
     const systemVoices = window.speechSynthesis.getVoices();
     console.log("System voices inventory loaded by browser:", systemVoices.map(v => `${v.name} (default: ${v.default})`));
     
-    const defaultVoice = systemVoices.find((v) => v.default === true);
-    if (defaultVoice) {
-      utterance.voice = defaultVoice;
-      console.log("Speaking using user's OS default voice:", defaultVoice.name);
+    // 1. Search for Prabhat/Prabahat or Ava (case-insensitive)
+    const targetVoice = systemVoices.find(
+      (v) =>
+        v.name.toLowerCase().includes("prabhat") ||
+        v.name.toLowerCase().includes("prabahat") ||
+        v.name.toLowerCase().includes("ava")
+    );
+
+    if (targetVoice) {
+      utterance.voice = targetVoice;
+      console.log("Speaking using matched target voice:", targetVoice.name);
     } else {
-      console.log("No custom default voice flag found, speaking with fallback default voice.");
+      // 2. Fallback to default system voice
+      const defaultVoice = systemVoices.find((v) => v.default === true);
+      if (defaultVoice) {
+        utterance.voice = defaultVoice;
+        console.log("Speaking using user's OS default voice:", defaultVoice.name);
+      } else {
+        console.log("No custom default voice flag found, speaking with fallback default voice.");
+      }
     }
 
     setVoiceState("speaking");
