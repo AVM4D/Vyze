@@ -985,3 +985,31 @@ html {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Upload Button styling */
+.upload-btn {
+  background: var(--primary-color);
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
+  border-radius: 3px;
+  color: var(--border-color);
+  cursor: pointer;
+  padding: 3px 8px;
+  margin-left: 4px;
+  font-size: 0.85em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.05s, box-shadow 0.05s;
+  box-sizing: border-box;
+}
+
+.upload-btn:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2.5px 2.5px 0px var(--border-color);
+}
+
+.upload-btn:active {
+  transform: translate(1.5px, 1.5px);
+  box-shadow: 0.5px 0.5px 0px var(--border-color);
+}

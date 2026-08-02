@@ -482,6 +482,35 @@ function App() {
     });
   }
 
+  // Handle uploading images or text documents
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    if (file.type.startsWith("image/")) {
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        const base64 = result.split(",")[1];
+        setAttachedImage(base64);
+        playBeep();
+      };
+      reader.readAsDataURL(file);
+    } else {
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        const maxChars = 15000;
+        const truncated = text.length > maxChars ? text.slice(0, maxChars) + "\n\n[Truncated...]" : text;
+        setSelectedText(`[Doc: ${file.name}]\n${truncated}`);
+        playBeep();
+      };
+      reader.readAsText(file);
+    }
+
+    e.target.value = "";
+  }
+
   // 4. Handle form prompt submit
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -728,6 +757,26 @@ function App() {
                 </svg>
               )}
             </button>
+
+            {/* Hidden file input */}
+            <input
+              type="file"
+              id="file-upload-input"
+              style={{ display: "none" }}
+              accept="image/*,.txt,.md,.json,.js,.ts,.html,.css,.rs"
+              onChange={handleFileUpload}
+              disabled={isLoading || voiceState === "speaking"}
+            />
+            {/* Attachment Button */}
+            <label
+              htmlFor="file-upload-input"
+              className="upload-btn"
+              title="Attach image or text document"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+              </svg>
+            </label>
 
             {voiceState === "speaking" ? (
               <button
