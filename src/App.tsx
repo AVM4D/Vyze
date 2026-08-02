@@ -33,7 +33,7 @@ function App() {
   // Settings States
   const [showSettings, setShowSettings] = useState(false);
   const [autoCapture, setAutoCapture] = useState(() => localStorage.getItem("vyze_auto_capture") === "true");
-  const [theme, setTheme] = useState(() => localStorage.getItem("vyze_theme") || "tv-girl");
+  const [theme, setTheme] = useState(() => localStorage.getItem("vyze_theme") || "retro-pink");
 
   const autoCaptureRef = useRef(autoCapture);
   const handleCaptureScreenRef = useRef<any>(null);
@@ -536,7 +536,7 @@ function App() {
                   value={theme}
                   onChange={(e) => setTheme(e.target.value)}
                 >
-                  <option value="tv-girl">TV Girl (Default)</option>
+                  <option value="retro-pink">Retro Pink (Default)</option>
                   <option value="cyberpunk">Cyberpunk</option>
                   <option value="dracula">Dracula</option>
                   <option value="monochrome">Monochrome</option>

@@ -2,7 +2,7 @@
 
 /* --- Theme Variables --- */
 :root {
-  /* Default TV Girl Pink theme */
+  /* Default Retro Pink theme */
   --primary-color: #ff66b2;
   --secondary-color: #38bdf8;
   --bg-card: #222225;
@@ -17,57 +17,97 @@
   --input-text-color: #ff66b2;
   --brand-color: #1c1822;
   --scroll-thumb: #38bdf8;
+
+  --welcome-bg: #161619;
+  --welcome-text-color: #cbd5e1;
+  --muted-bg: #475569;
+  --muted-text-color: #cbd5e1;
+  --checkbox-bg: #ffffff;
+  --checkbox-checked-bg: #ff66b2;
+
+  /* Layout Customizations */
+  --font-family: 'Space Grotesk', sans-serif;
+  --border-radius-card: 6px;
+  --border-radius-bubble-user: 2px;
+  --border-radius-bubble-assistant: 4px;
+  --border-width: 3px;
+  --bubble-user-rotation: -1.5deg;
+  --card-shadow: 6px 6px 0px var(--shadow-color);
+  --header-rotation: -1deg;
+  --card-bg-pattern: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
 }
 
 .hud-container.theme-cyberpunk {
-  --primary-color: #ffe600;      /* Neon Yellow */
-  --secondary-color: #00f0ff;    /* Neon Cyan */
-  --bg-card: #0d0d0d;            /* Deep Dark Black */
-  --bg-input: #18181b;
-  --border-color: #ffe600;       /* Neon Yellow borders */
-  --text-color: #ffe600;         /* Neon Yellow texts */
-  --user-bubble-bg: #bc13fe;     /* Purple bubble */
-  --user-bubble-fg: #ffffff;
-  --assistant-bubble-bg: #00f0ff; /* Cyan bubble */
-  --assistant-bubble-fg: #0d0d0d;
-  --shadow-color: #bc13fe;       /* Purple shadow */
-  --input-text-color: #00f0ff;   /* Cyan typing text */
-  --brand-color: #0d0d0d;
-  --scroll-thumb: #ffe600;
+  --primary-color: #00f0ff;      /* Cyan */
+  --secondary-color: #ffe600;    /* Yellow */
+  --bg-card: #121214;            /* Dark Charcoal */
+  --bg-input: #08080a;
+  --border-color: #08080a;
+  --text-color: #ffffff;
+  --user-bubble-bg: #00f0ff;
+  --user-bubble-fg: #08080a;
+  --assistant-bubble-bg: #ffe600;
+  --assistant-bubble-fg: #08080a;
+  --shadow-color: #bc13fe;       /* Neon Purple shadow */
+  --input-text-color: #00f0ff;
+  --brand-color: #08080a;
+  --scroll-thumb: #00f0ff;
+
+  --welcome-bg: #1a1a1e;
+  --welcome-text-color: #cbd5e1;
+  --muted-bg: #27272a;
+  --muted-text-color: #71717a;
+  --checkbox-bg: #1a1a1e;
+  --checkbox-checked-bg: #00f0ff;
 }
 
 .hud-container.theme-dracula {
-  --primary-color: #ff79c6;      /* Dracula Pink */
-  --secondary-color: #50fa7b;    /* Dracula Poison Green */
-  --bg-card: #282a36;            /* Dracula Dark Background */
+  --primary-color: #bd93f9;      /* Purple */
+  --secondary-color: #50fa7b;    /* Green */
+  --bg-card: #282a36;            /* Dracula Dark */
   --bg-input: #1e1f29;
-  --border-color: #bd93f9;       /* Dracula Purple Border */
-  --text-color: #f8f8f2;         /* Dracula Off-White Text */
-  --user-bubble-bg: #ff79c6;     /* Pink user bubble */
+  --border-color: #1e1f29;
+  --text-color: #f8f8f2;
+  --user-bubble-bg: #bd93f9;
   --user-bubble-fg: #282a36;
-  --assistant-bubble-bg: #50fa7b; /* Poison Green assistant bubble */
+  --assistant-bubble-bg: #50fa7b;
   --assistant-bubble-fg: #282a36;
-  --shadow-color: #bd93f9;       /* Purple shadow */
-  --input-text-color: #ff79c6;   /* Pink typing text */
-  --brand-color: #282a36;
+  --shadow-color: #ff79c6;       /* Dracula Pink shadow */
+  --input-text-color: #bd93f9;
+  --brand-color: #1e1f29;
   --scroll-thumb: #bd93f9;
+
+  --welcome-bg: #1e1f29;
+  --welcome-text-color: #f8f8f2;
+  --muted-bg: #44475a;
+  --muted-text-color: #6272a4;
+  --checkbox-bg: #1e1f29;
+  --checkbox-checked-bg: #bd93f9;
 }
 
 .hud-container.theme-monochrome {
   --primary-color: #ffffff;      /* White */
-  --secondary-color: #e5e5e5;    /* Light Grey */
-  --bg-card: #171717;            /* Matte Black */
-  --bg-input: #0a0a0a;
-  --border-color: #ffffff;       /* Solid White Border */
-  --text-color: #ffffff;
+  --secondary-color: #a3a3a3;    /* Grey */
+  --bg-card: #1f2937;            /* Cool Slate Dark */
+  --bg-input: #111827;
+  --border-color: #111827;
+  --text-color: #f3f4f6;
   --user-bubble-bg: #ffffff;
-  --user-bubble-fg: #171717;
-  --assistant-bubble-bg: #a3a3a3; /* Mid Grey */
-  --assistant-bubble-fg: #171717;
-  --shadow-color: #525252;       /* Grey Shadow */
+  --user-bubble-fg: #111827;
+  --assistant-bubble-bg: #a3a3a3;
+  --assistant-bubble-fg: #111827;
+  --shadow-color: #4b5563;       /* Slate Grey shadow */
   --input-text-color: #ffffff;
-  --brand-color: #171717;
+  --brand-color: #111827;
   --scroll-thumb: #ffffff;
+
+  --welcome-bg: #111827;
+  --welcome-text-color: #d1d5db;
+  --muted-bg: #374151;
+  --muted-text-color: #9ca3af;
+  --checkbox-bg: #111827;
+  --checkbox-checked-bg: #ffffff;
 }
 
 /* --- Reset & Base Variables --- */
@@ -77,7 +117,7 @@ html {
   padding: 0;
   overflow: hidden;
   background: transparent;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-family);
   color: var(--text-color);
   height: 100%;
 }
@@ -103,10 +143,7 @@ html {
   width: 340px;
   height: 260px;
   background-color: var(--bg-card);
-  /* Light shade of black */
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-image: var(--card-bg-pattern);
   background-size: 10px 10px;
   /* Fine white digital grid lines */
   border: 3px solid var(--border-color);
@@ -195,24 +232,24 @@ html {
   border: 2px solid var(--border-color);
   border-radius: 4px;
   padding: 1px 4px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-family);
   font-size: 0.65em;
   font-weight: 800;
-  color: #1c1822;
+  color: var(--brand-color);
   outline: none;
   cursor: pointer;
-  box-shadow: 2px 2px 0px #1c1822;
+  box-shadow: 2px 2px 0px var(--border-color);
   transition: transform 0.05s, box-shadow 0.05s;
 }
 
 .provider-select:hover {
   transform: translate(-0.5px, -0.5px);
-  box-shadow: 2.5px 2.5px 0px #1c1822;
+  box-shadow: 2.5px 2.5px 0px var(--border-color);
 }
 
 .provider-select:active {
   transform: translate(1.5px, 1.5px);
-  box-shadow: 0.5px 0.5px 0px #1c1822;
+  box-shadow: 0.5px 0.5px 0px var(--border-color);
 }
 
 /* --- Auto-Copy Toggle Switch --- */
@@ -223,24 +260,25 @@ html {
   cursor: pointer;
   font-size: 0.68em;
   font-weight: 800;
-  color: #a1a1aa;
+  color: var(--text-color);
   user-select: none;
+  opacity: 0.8;
 }
 
 .autocopy-checkbox {
   appearance: none;
   width: 12px;
   height: 12px;
-  border: 2px solid #1c1822;
-  background: #ffffff;
+  border: 2px solid var(--border-color);
+  background: var(--checkbox-bg);
   cursor: pointer;
   position: relative;
   border-radius: 2px;
-  box-shadow: 1px 1px 0px #1c1822;
+  box-shadow: 1px 1px 0px var(--border-color);
 }
 
 .autocopy-checkbox:checked {
-  background: #ff66b2;
+  background: var(--checkbox-checked-bg);
   /* Saturated Pink check */
 }
 
@@ -250,7 +288,7 @@ html {
   top: -3px;
   left: 1px;
   font-size: 8px;
-  color: #ffffff;
+  color: var(--brand-color);
   font-weight: 900;
 }
 
@@ -266,24 +304,24 @@ html {
 /* --- Instructions text --- */
 .welcome-text {
   font-size: 0.65em;
-  color: #cbd5e1;
+  color: var(--welcome-text-color);
   line-height: 1.35;
   margin: 2px 0;
   padding: 6px;
-  background: #161619 !important;
+  background: var(--welcome-bg) !important;
   /* Solid dark carbon background */
-  border: 2px solid #1c1822;
-  box-shadow: 2px 2px 0px #1c1822;
-  border-radius: 4px;
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
+  border-radius: var(--border-radius-bubble-assistant);
 }
 
 /* --- Pink Context Banner --- */
 .context-box {
-  background: #ff66b2 !important;
+  background: var(--primary-color) !important;
   /* TV Girl Saturated Pink background */
-  color: #1c1822 !important;
-  border: 2px solid #1c1822;
-  box-shadow: 2px 2px 0px #1c1822;
+  color: var(--brand-color) !important;
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
   border-radius: 4px;
   padding: 4px 8px;
   font-size: 0.65em;
@@ -301,7 +339,7 @@ html {
 
 .context-label {
   font-weight: 800;
-  color: #1c1822;
+  color: var(--brand-color);
   letter-spacing: 0.5px;
 }
 
@@ -309,14 +347,14 @@ html {
   background: transparent;
   border: none;
   outline: none;
-  color: #1c1822;
+  color: var(--brand-color);
   cursor: pointer;
   font-size: 1.1em;
   font-weight: 900;
 }
 
 .context-body {
-  color: #1c1822 !important;
+  color: var(--brand-color) !important;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -523,29 +561,29 @@ html {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  border: 1px solid #1c1822;
+  border: 1px solid var(--border-color);
   animation: ledPulse 0.6s infinite alternate;
 }
 
-/* LED 1: Flashing MAGENTA PINK */
+/* LED 1: Flashing PRIMARY COLOR */
 .dot-flashing div:nth-child(1) {
-  background-color: #ff66b2 !important;
+  background-color: var(--primary-color) !important;
   animation-delay: 0s;
-  box-shadow: 0 0 4px #ff66b2;
+  box-shadow: 0 0 4px var(--primary-color);
 }
 
-/* LED 2: Flashing YELLOW */
+/* LED 2: Flashing SECONDARY COLOR */
 .dot-flashing div:nth-child(2) {
-  background-color: #eab308 !important;
+  background-color: var(--secondary-color) !important;
   animation-delay: 0.2s;
-  box-shadow: 0 0 4px #eab308;
+  box-shadow: 0 0 4px var(--secondary-color);
 }
 
-/* LED 3: Flashing SKY BLUE */
+/* LED 3: Flashing PRIMARY COLOR */
 .dot-flashing div:nth-child(3) {
-  background-color: #38bdf8 !important;
+  background-color: var(--primary-color) !important;
   animation-delay: 0.4s;
-  box-shadow: 0 0 4px #38bdf8;
+  box-shadow: 0 0 4px var(--primary-color);
 }
 
 /* --- Animations --- */
@@ -575,15 +613,15 @@ html {
 
 /* --- Voice Dictation UI Controls (TV Girl Theme) --- */
 .voice-toggle-btn {
-  background: #ff66b2;
+  background: var(--primary-color);
   /* TV Girl Pink base */
-  border: 2px solid #1c1822;
-  box-shadow: 2px 2px 0px #1c1822;
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
   border-radius: 4px;
-  color: #1c1822;
+  color: var(--brand-color);
   cursor: pointer;
   padding: 1px 6px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-family);
   font-size: 0.63em;
   font-weight: 800;
   display: flex;
@@ -595,20 +633,20 @@ html {
 }
 
 .voice-toggle-btn.muted {
-  background: #475569;
+  background: var(--muted-bg);
   /* Muted Slate Gray */
-  color: #cbd5e1;
-  box-shadow: 2px 2px 0px #1c1822;
+  color: var(--muted-text-color);
+  box-shadow: 2px 2px 0px var(--border-color);
 }
 
 .voice-toggle-btn:hover {
   transform: translate(-0.5px, -0.5px);
-  box-shadow: 2.5px 2.5px 0px #1c1822;
+  box-shadow: 2.5px 2.5px 0px var(--border-color);
 }
 
 .voice-toggle-btn:active {
   transform: translate(1.5px, 1.5px);
-  box-shadow: 0.5px 0.5px 0px #1c1822;
+  box-shadow: 0.5px 0.5px 0px var(--border-color);
 }
 
 /* Voice LED Status Dots */
@@ -616,15 +654,15 @@ html {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1px solid #1c1822;
+  border: 1px solid var(--border-color);
   display: inline-block;
   transition: background-color 0.2s, box-shadow 0.2s;
 }
 
 /* Cyan Glowing LED (Continuous background standby) */
 .voice-led.standby {
-  background-color: #38bdf8 !important;
-  box-shadow: 0 0 5px #38bdf8;
+  background-color: var(--secondary-color) !important;
+  box-shadow: 0 0 5px var(--secondary-color);
   animation: ledPulse 1s infinite alternate;
 }
 
@@ -653,8 +691,8 @@ html {
 .stop-speech-btn {
   background: #ef4444;
   /* Alert red background */
-  border: 2px solid #1c1822;
-  box-shadow: 2px 2px 0px #1c1822;
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
   border-radius: 3px;
   color: #ffffff;
   cursor: pointer;
@@ -674,12 +712,12 @@ html {
 
 .stop-speech-btn:hover {
   transform: translate(-0.5px, -0.5px);
-  box-shadow: 2.5px 2.5px 0px #1c1822;
+  box-shadow: 2.5px 2.5px 0px var(--border-color);
 }
 
 .stop-speech-btn:active {
   transform: translate(1.5px, 1.5px);
-  box-shadow: 0.5px 0.5px 0px #1c1822;
+  box-shadow: 0.5px 0.5px 0px var(--border-color);
 }
 
 /* --- Screen Capture & Vision Styles (TV Girl Theme) --- */
@@ -687,7 +725,7 @@ html {
 /* Image inside the Chat Bubble */
 .bubble-image-container {
   margin-bottom: 6px;
-  border: 1.5px solid #1c1822;
+  border: 1.5px solid var(--border-color);
   border-radius: 4px;
   overflow: hidden;
   max-width: 100%;
@@ -792,7 +830,8 @@ html {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(28, 24, 34, 0.96); /* Solid dark mask matching border color */
+  background: var(--bg-input);
+  opacity: 0.97;
   z-index: 100;
   display: flex;
   justify-content: center;
@@ -804,9 +843,9 @@ html {
 .settings-card {
   width: 100%;
   background: var(--bg-card);
-  border: 3.5px solid var(--border-color);
+  border: var(--border-width) solid var(--border-color);
   box-shadow: 4px 4px 0px var(--shadow-color);
-  border-radius: 4px;
+  border-radius: var(--border-radius-bubble-assistant);
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -839,6 +878,7 @@ html {
   gap: 6px;
   cursor: pointer;
   user-select: none;
+  color: var(--text-color);
 }
 
 .setting-checkbox {
@@ -846,7 +886,7 @@ html {
   width: 12px;
   height: 12px;
   border: 2px solid var(--border-color);
-  background: #ffffff;
+  background: var(--checkbox-bg);
   cursor: pointer;
   position: relative;
   border-radius: 2px;
@@ -863,7 +903,7 @@ html {
   top: -3px;
   left: 1px;
   font-size: 8px;
-  color: #ffffff;
+  color: var(--brand-color);
   font-weight: 900;
 }
 
@@ -876,10 +916,10 @@ html {
   border: 2px solid var(--border-color);
   border-radius: 3px;
   padding: 1px 4px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-family);
   font-size: 1em;
   font-weight: 800;
-  color: var(--border-color);
+  color: var(--brand-color);
   outline: none;
   cursor: pointer;
   box-shadow: 1.5px 1.5px 0px var(--border-color);
@@ -887,12 +927,12 @@ html {
 
 .settings-close-btn {
   background: var(--primary-color);
-  color: var(--border-color);
+  color: var(--brand-color);
   border: 2px solid var(--border-color);
   box-shadow: 2.5px 2.5px 0px var(--border-color);
   border-radius: 3px;
   padding: 3px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-family);
   font-size: 0.85em;
   font-weight: 800;
   cursor: pointer;
