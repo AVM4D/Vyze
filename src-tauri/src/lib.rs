@@ -219,10 +219,19 @@ async fn capture_active_screen(window: tauri::WebviewWindow) -> Result<String, S
         }
     };
 
+    // Resize the image to fit within 1024x1024 while maintaining aspect ratio.
+    // This reduces payload transfer size and prevents local model context overflow / VRAM crash.
+    let dynamic_image = image::DynamicImage::ImageRgba8(image);
+    let resized_image = dynamic_image.resize(
+        1024,
+        1024,
+        image::imageops::FilterType::Triangle,
+    );
+
     // 6. Compress RGBA buffer directly to PNG bytes
     let mut png_bytes = Vec::new();
     let mut write_cursor = Cursor::new(&mut png_bytes);
-    if let Err(e) = image.write_to(&mut write_cursor, image::ImageFormat::Png) {
+    if let Err(e) = resized_image.write_to(&mut write_cursor, image::ImageFormat::Png) {
         // Show the window back in case of error
         let _ = window.show();
         let _ = window.set_focus();

@@ -211,13 +211,13 @@ impl AiProvider for OllamaProvider {
                 })
                 .collect();
 
-            // Construct native Ollama JSON payload with options (8192 context size)
+            // Construct native Ollama JSON payload with options (16384 context size)
             let body = serde_json::json!({
                 "model": model,
                 "messages": messages,
                 "stream": true,
                 "options": {
-                    "num_ctx": 8192
+                    "num_ctx": 16384
                 }
             });
 
