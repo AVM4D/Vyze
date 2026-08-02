@@ -19,6 +19,19 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState}; // Import StreamExt so we can call .next() on our stream
                                                                                                  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+// AppState stores configuration settings like auto_capture in a Mutex for safe access
+pub struct AppState {
+    pub auto_capture: std::sync::Mutex<bool>,
+}
+
+// command to toggle the auto_capture state in AppState
+#[tauri::command]
+fn set_auto_capture(state: tauri::State<'_, AppState>, enabled: bool) {
+    if let Ok(mut auto_cap) = state.auto_capture.lock() {
+        *auto_cap = enabled;
+    }
+}
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -147,6 +160,77 @@ async fn capture_selection() -> Result<String, String> {
     Ok(perform_capture().await)
 }
 
+// Helper function to capture the active monitor under the cursor, resize it, and return a base64 PNG string
+async fn perform_screen_capture() -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        // 1. Fetch current cursor position
+        let mut point = POINT { x: 0, y: 0 };
+        let (cursor_x, cursor_y) = unsafe {
+            if GetCursorPos(&mut point).is_ok() {
+                (point.x, point.y)
+            } else {
+                (0, 0)
+            }
+        };
+
+        // 2. Query all active monitors
+        let monitors = xcap::Monitor::all().map_err(|e| format!("Failed to query monitors: {}", e))?;
+
+        // 3. Find monitor containing mouse cursor coordinate
+        let mut active_monitor = None;
+        for m in monitors {
+            let start_x = m.x().map_err(|e| format!("Failed to read monitor X: {}", e))?;
+            let width = m.width().map_err(|e| format!("Failed to read monitor width: {}", e))?;
+            let start_y = m.y().map_err(|e| format!("Failed to read monitor Y: {}", e))?;
+            let height = m.height().map_err(|e| format!("Failed to read monitor height: {}", e))?;
+
+            let end_x = start_x + width as i32;
+            let end_y = start_y + height as i32;
+
+            if cursor_x >= start_x && cursor_x <= end_x && cursor_y >= start_y && cursor_y <= end_y {
+                active_monitor = Some(m);
+                break;
+            }
+        }
+
+        // Default to first monitor if cursor isn't in any screen boundaries
+        let monitor = match active_monitor {
+            Some(m) => m,
+            None => {
+                let all = xcap::Monitor::all().map_err(|e| e.to_string())?;
+                if all.is_empty() {
+                    return Err("No active displays found to capture".to_string());
+                }
+                all[0].clone()
+            }
+        };
+
+        // 4. Capture surface
+        let image = monitor.capture_image().map_err(|e| format!("Direct surface capture failed: {}", e))?;
+
+        // Resize the image to fit within 1024x1024 while maintaining aspect ratio.
+        let dynamic_image = image::DynamicImage::ImageRgba8(image);
+        let resized_image = dynamic_image.resize(
+            1024,
+            1024,
+            image::imageops::FilterType::Triangle,
+        );
+
+        // 5. Compress RGBA buffer directly to PNG bytes
+        let mut png_bytes = Vec::new();
+        let mut write_cursor = Cursor::new(&mut png_bytes);
+        resized_image.write_to(&mut write_cursor, image::ImageFormat::Png)
+            .map_err(|e| format!("PNG encoding failure: {}", e))?;
+
+        // 6. Base64 serialize PNG binary to ASCII text
+        let base64_str = BASE64_STANDARD.encode(&png_bytes);
+
+        Ok(base64_str)
+    })
+    .await
+    .map_err(|e| format!("Thread join failure: {}", e))?
+}
+
 #[tauri::command]
 async fn capture_active_screen(window: tauri::WebviewWindow) -> Result<String, String> {
     // 1. Hide the Vyze window first so it doesn't appear in the screenshot
@@ -155,97 +239,14 @@ async fn capture_active_screen(window: tauri::WebviewWindow) -> Result<String, S
     // Wait 150ms for the hide window animation to finish
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
-    // 2. Fetch current cursor position
-    let mut point = POINT { x: 0, y: 0 };
-    let (cursor_x, cursor_y) = unsafe {
-        if GetCursorPos(&mut point).is_ok() {
-            (point.x, point.y)
-        } else {
-            (0, 0)
-        }
-    };
+    // 2. Perform screen capture using our helper
+    let result = perform_screen_capture().await;
 
-    // 3. Query all active monitors
-    let monitors = xcap::Monitor::all().map_err(|e| format!("Failed to query monitors: {}", e))?;
-
-    // 4. Find monitor containing mouse cursor coordinate
-    let mut active_monitor = None;
-    for m in monitors {
-        let start_x = m
-            .x()
-            .map_err(|e| format!("Failed to read monitor X: {}", e))?;
-        let width = m
-            .width()
-            .map_err(|e| format!("Failed to read monitor width: {}", e))?;
-        let start_y = m
-            .y()
-            .map_err(|e| format!("Failed to read monitor Y: {}", e))?;
-        let height = m
-            .height()
-            .map_err(|e| format!("Failed to read monitor height: {}", e))?;
-
-        let end_x = start_x + width as i32;
-        let end_y = start_y + height as i32;
-
-        if cursor_x >= start_x && cursor_x <= end_x && cursor_y >= start_y && cursor_y <= end_y {
-            active_monitor = Some(m);
-            break;
-        }
-    }
-
-    // Default to first monitor if cursor isn't in any screen boundaries
-    let monitor = match active_monitor {
-        Some(m) => m,
-        None => {
-            let all = xcap::Monitor::all().map_err(|e| e.to_string())?;
-            if all.is_empty() {
-                // Show the window back in case of error
-                let _ = window.show();
-                let _ = window.set_focus();
-                return Err("No active displays found to capture".to_string());
-            }
-            all[0].clone()
-        }
-    };
-
-    // 5. Capture surface
-    let image = match monitor.capture_image() {
-        Ok(img) => img,
-        Err(e) => {
-            // Show the window back in case of error
-            let _ = window.show();
-            let _ = window.set_focus();
-            return Err(format!("Direct surface capture failed: {}", e));
-        }
-    };
-
-    // Resize the image to fit within 1024x1024 while maintaining aspect ratio.
-    // This reduces payload transfer size and prevents local model context overflow / VRAM crash.
-    let dynamic_image = image::DynamicImage::ImageRgba8(image);
-    let resized_image = dynamic_image.resize(
-        1024,
-        1024,
-        image::imageops::FilterType::Triangle,
-    );
-
-    // 6. Compress RGBA buffer directly to PNG bytes
-    let mut png_bytes = Vec::new();
-    let mut write_cursor = Cursor::new(&mut png_bytes);
-    if let Err(e) = resized_image.write_to(&mut write_cursor, image::ImageFormat::Png) {
-        // Show the window back in case of error
-        let _ = window.show();
-        let _ = window.set_focus();
-        return Err(format!("PNG encoding failure: {}", e));
-    }
-
-    // 7. Base64 serialize PNG binary to ASCII text
-    let base64_str = BASE64_STANDARD.encode(&png_bytes);
-
-    // 8. Bring the Vyze window back to the screen and focus it!
+    // 3. Bring the Vyze window back to the screen and focus it!
     let _ = window.show();
     let _ = window.set_focus();
 
-    Ok(base64_str)
+    result
 }
 
 fn toggle_window(app: &tauri::AppHandle) {
@@ -255,22 +256,20 @@ fn toggle_window(app: &tauri::AppHandle) {
             window.hide().unwrap();
         } else {
             let window_clone = window.clone();
+            let app_handle = app.clone();
 
-            // 1. Fetch current cursor position
+            // Calculate cursor coordinates
             let mut point = POINT { x: 0, y: 0 };
             let (cursor_x, cursor_y) = unsafe {
                 if GetCursorPos(&mut point).is_ok() {
                     (point.x, point.y)
                 } else {
-                    (100, 100) // Safe fallback coordinate
+                    (100, 100)
                 }
             };
 
-            // 2. Define the popup window size dimensions (matching tauri.conf.json)
             let win_width = 360;
             let win_height = 280;
-
-            // 3. Locate the monitor containing the cursor coordinates
             let mut monitor_x = 0;
             let mut monitor_y = 0;
             let mut monitor_width = 1920;
@@ -280,16 +279,8 @@ fn toggle_window(app: &tauri::AppHandle) {
                 for m in monitors {
                     let pos = m.position();
                     let size = m.size();
-                    let start_x = pos.x;
-                    let end_x = pos.x + size.width as i32;
-                    let start_y = pos.y;
-                    let end_y = pos.y + size.height as i32;
-
-                    // Check if cursor point lies within this monitor's bounds
-                    if cursor_x >= start_x
-                        && cursor_x <= end_x
-                        && cursor_y >= start_y
-                        && cursor_y <= end_y
+                    if cursor_x >= pos.x && cursor_x <= pos.x + size.width as i32
+                        && cursor_y >= pos.y && cursor_y <= pos.y + size.height as i32
                     {
                         monitor_x = pos.x;
                         monitor_y = pos.y;
@@ -299,7 +290,6 @@ fn toggle_window(app: &tauri::AppHandle) {
                     }
                 }
             } else if let Ok(Some(monitor)) = window.current_monitor() {
-                // Fallback to active window monitor if list fails
                 let pos = monitor.position();
                 let size = monitor.size();
                 monitor_x = pos.x;
@@ -308,20 +298,16 @@ fn toggle_window(app: &tauri::AppHandle) {
                 monitor_height = size.height as i32;
             }
 
-            // Offset the popup slightly down and right from the cursor
             let mut final_x = cursor_x + 12;
             let mut final_y = cursor_y + 12;
 
-            // Flip left if overflowing the right edge of this specific monitor
             if final_x + win_width > monitor_x + monitor_width {
                 final_x = cursor_x - win_width - 12;
             }
-            // Flip up if overflowing the bottom edge of this specific monitor
             if final_y + win_height > monitor_y + monitor_height {
                 final_y = cursor_y - win_height - 12;
             }
 
-            // Hard clamp to this monitor's boundaries
             if final_x < monitor_x {
                 final_x = monitor_x + 10;
             }
@@ -329,17 +315,36 @@ fn toggle_window(app: &tauri::AppHandle) {
                 final_y = monitor_y + 10;
             }
 
-            // Set the calculated position on the window
             let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
                 final_x, final_y,
             )));
 
-            // 4. Spawn selection capture background task, then show HUD
+            // Silent capture on wake logic
             tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                let auto_capture_enabled = if let Ok(auto_cap) = state.auto_capture.lock() {
+                    *auto_cap
+                } else {
+                    false
+                };
+
                 let selected_text = perform_capture().await;
+
+                let mut screen_capture_base64 = None;
+                if auto_capture_enabled {
+                    // Capture while window is completely hidden
+                    if let Ok(base64) = perform_screen_capture().await {
+                        screen_capture_base64 = Some(base64);
+                    }
+                }
+
+                // Show window only after capture is finished
                 let _ = window_clone.show();
                 let _ = window_clone.set_focus();
                 let _ = window_clone.emit("selection-captured", selected_text);
+                if let Some(base64) = screen_capture_base64 {
+                    let _ = window_clone.emit("auto-screen-captured", base64);
+                }
             });
         }
     }
@@ -349,21 +354,19 @@ fn toggle_window(app: &tauri::AppHandle) {
 fn show_main_window(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let window_clone = window.clone();
+        let app_handle = app.clone();
 
-        // Fetch current cursor position
         let mut point = POINT { x: 0, y: 0 };
         let (cursor_x, cursor_y) = unsafe {
             if GetCursorPos(&mut point).is_ok() {
                 (point.x, point.y)
             } else {
-                (100, 100) // Safe fallback coordinate
+                (100, 100)
             }
         };
 
-        // Window size dimensions (matching tauri.conf.json)
         let win_width = 360;
         let win_height = 280;
-
         let mut monitor_x = 0;
         let mut monitor_y = 0;
         let mut monitor_width = 1920;
@@ -373,15 +376,8 @@ fn show_main_window(app: tauri::AppHandle) {
             for m in monitors {
                 let pos = m.position();
                 let size = m.size();
-                let start_x = pos.x;
-                let end_x = pos.x + size.width as i32;
-                let start_y = pos.y;
-                let end_y = pos.y + size.height as i32;
-
-                if cursor_x >= start_x
-                    && cursor_x <= end_x
-                    && cursor_y >= start_y
-                    && cursor_y <= end_y
+                if cursor_x >= pos.x && cursor_x <= pos.x + size.width as i32
+                    && cursor_y >= pos.y && cursor_y <= pos.y + size.height as i32
                 {
                     monitor_x = pos.x;
                     monitor_y = pos.y;
@@ -392,7 +388,6 @@ fn show_main_window(app: tauri::AppHandle) {
             }
         }
 
-        // Offset the popup slightly down and right from the cursor
         let mut final_x = cursor_x + 12;
         let mut final_y = cursor_y + 12;
 
@@ -410,17 +405,33 @@ fn show_main_window(app: tauri::AppHandle) {
             final_y = monitor_y + 10;
         }
 
-        // Position window at cursor
         let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
             final_x, final_y,
         )));
 
-        // Spawn a background capture task, show window, and emit the selection context
         tauri::async_runtime::spawn(async move {
+            let state = app_handle.state::<AppState>();
+            let auto_capture_enabled = if let Ok(auto_cap) = state.auto_capture.lock() {
+                *auto_cap
+            } else {
+                false
+            };
+
             let selected_text = perform_capture().await;
+
+            let mut screen_capture_base64 = None;
+            if auto_capture_enabled {
+                if let Ok(base64) = perform_screen_capture().await {
+                    screen_capture_base64 = Some(base64);
+                }
+            }
+
             let _ = window_clone.show();
             let _ = window_clone.set_focus();
             let _ = window_clone.emit("selection-captured", selected_text);
+            if let Some(base64) = screen_capture_base64 {
+                let _ = window_clone.emit("auto-screen-captured", base64);
+            }
         });
     }
 }
@@ -429,8 +440,10 @@ fn show_main_window(app: tauri::AppHandle) {
 pub fn run() {
     dotenvy::dotenv().ok();
     tauri::Builder::default()
+        .manage(AppState {
+            auto_capture: std::sync::Mutex::new(false),
+        })
         .plugin(tauri_plugin_opener::init())
-        // Register greet, ask_vyze, and clipboard commands
         .invoke_handler(tauri::generate_handler![
             greet,
             ask_vyze,
@@ -438,7 +451,8 @@ pub fn run() {
             write_clipboard,
             capture_selection,
             show_main_window,
-            capture_active_screen
+            capture_active_screen,
+            set_auto_capture
         ])
         .setup(|app| {
             // 1. System Tray setup

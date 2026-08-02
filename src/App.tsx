@@ -44,6 +44,7 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem("vyze_auto_capture", String(autoCapture));
+    invoke("set_auto_capture", { enabled: autoCapture }).catch(console.error);
   }, [autoCapture]);
 
   useEffect(() => {
@@ -283,12 +284,14 @@ function App() {
     };
   }, [voiceState, voiceActive]);
 
-  // 1. Listen for the global selection capture event from the Rust hotkey wake
+  // 1. Listen for the global selection and silent screen capture events from Rust
   useEffect(() => {
-    let unlistenFn: (() => void) | null = null;
+    let unlistenTextFn: (() => void) | null = null;
+    let unlistenScreenFn: (() => void) | null = null;
 
-    async function setupListener() {
-      const unlisten = await listen<string>("selection-captured", (event) => {
+    async function setupListeners() {
+      // Listen for text selection capture
+      unlistenTextFn = await listen<string>("selection-captured", (event) => {
         const text = event.payload;
         if (text && text.trim()) {
           setSelectedText(text.trim());
@@ -298,26 +301,24 @@ function App() {
         setTimeout(() => {
           inputRef.current?.focus();
         }, 50);
+      });
 
-        // Auto-capture screen on wake if enabled
-        if (autoCaptureRef.current) {
-          setTimeout(() => {
-            if (handleCaptureScreenRef.current) {
-              handleCaptureScreenRef.current();
-            }
-          }, 100);
+      // Listen for silent auto screen capture complete
+      unlistenScreenFn = await listen<string>("auto-screen-captured", (event) => {
+        const base64 = event.payload;
+        if (base64) {
+          setAttachedImage(base64);
+          playBeep(); // Beep to signal that the hidden capture succeeded!
         }
       });
-      unlistenFn = unlisten;
     }
 
-    setupListener();
+    setupListeners();
 
-    // Clean up event listener on unmount
+    // Clean up event listeners on unmount
     return () => {
-      if (unlistenFn) {
-        unlistenFn();
-      }
+      if (unlistenTextFn) unlistenTextFn();
+      if (unlistenScreenFn) unlistenScreenFn();
     };
   }, []);
 

@@ -14,56 +14,60 @@
   --assistant-bubble-bg: #38bdf8;
   --assistant-bubble-fg: #1c1822;
   --shadow-color: #38bdf8;
-  --input-text-color: #ffffff;
+  --input-text-color: #ff66b2;
   --brand-color: #1c1822;
+  --scroll-thumb: #38bdf8;
 }
 
 .hud-container.theme-cyberpunk {
-  --primary-color: #bc13fe;
-  --secondary-color: #00f0ff;
-  --bg-card: #0d0d0d;
-  --bg-input: #1a1a1a;
-  --border-color: #00f0ff;
-  --text-color: #00f0ff;
-  --user-bubble-bg: #bc13fe;
+  --primary-color: #ffe600;      /* Neon Yellow */
+  --secondary-color: #00f0ff;    /* Neon Cyan */
+  --bg-card: #0d0d0d;            /* Deep Dark Black */
+  --bg-input: #18181b;
+  --border-color: #ffe600;       /* Neon Yellow borders */
+  --text-color: #ffe600;         /* Neon Yellow texts */
+  --user-bubble-bg: #bc13fe;     /* Purple bubble */
   --user-bubble-fg: #ffffff;
-  --assistant-bubble-bg: #00f0ff;
+  --assistant-bubble-bg: #00f0ff; /* Cyan bubble */
   --assistant-bubble-fg: #0d0d0d;
-  --shadow-color: #ffe600;
-  --input-text-color: #ffe600;
-  --brand-color: #ffffff;
+  --shadow-color: #bc13fe;       /* Purple shadow */
+  --input-text-color: #00f0ff;   /* Cyan typing text */
+  --brand-color: #0d0d0d;
+  --scroll-thumb: #ffe600;
 }
 
 .hud-container.theme-dracula {
-  --primary-color: #ff79c6;
-  --secondary-color: #8be9fd;
-  --bg-card: #282a36;
+  --primary-color: #ff79c6;      /* Dracula Pink */
+  --secondary-color: #50fa7b;    /* Dracula Poison Green */
+  --bg-card: #282a36;            /* Dracula Dark Background */
   --bg-input: #1e1f29;
-  --border-color: #44475a;
-  --text-color: #f8f8f2;
-  --user-bubble-bg: #bd93f9;
+  --border-color: #bd93f9;       /* Dracula Purple Border */
+  --text-color: #f8f8f2;         /* Dracula Off-White Text */
+  --user-bubble-bg: #ff79c6;     /* Pink user bubble */
   --user-bubble-fg: #282a36;
-  --assistant-bubble-bg: #50fa7b;
+  --assistant-bubble-bg: #50fa7b; /* Poison Green assistant bubble */
   --assistant-bubble-fg: #282a36;
-  --shadow-color: #ff79c6;
-  --input-text-color: #f8f8f2;
+  --shadow-color: #bd93f9;       /* Purple shadow */
+  --input-text-color: #ff79c6;   /* Pink typing text */
   --brand-color: #282a36;
+  --scroll-thumb: #bd93f9;
 }
 
 .hud-container.theme-monochrome {
-  --primary-color: #ffffff;
-  --secondary-color: #a3a3a3;
-  --bg-card: #171717;
+  --primary-color: #ffffff;      /* White */
+  --secondary-color: #e5e5e5;    /* Light Grey */
+  --bg-card: #171717;            /* Matte Black */
   --bg-input: #0a0a0a;
-  --border-color: #ffffff;
+  --border-color: #ffffff;       /* Solid White Border */
   --text-color: #ffffff;
   --user-bubble-bg: #ffffff;
   --user-bubble-fg: #171717;
-  --assistant-bubble-bg: #e5e5e5;
+  --assistant-bubble-bg: #a3a3a3; /* Mid Grey */
   --assistant-bubble-fg: #171717;
-  --shadow-color: #404040;
+  --shadow-color: #525252;       /* Grey Shadow */
   --input-text-color: #ffffff;
   --brand-color: #171717;
+  --scroll-thumb: #ffffff;
 }
 
 /* --- Reset & Base Variables --- */
@@ -336,12 +340,13 @@ html {
 }
 
 .chat-container::-webkit-scrollbar-track {
-  background: #2a2533;
+  background: var(--bg-input);
 }
 
 .chat-container::-webkit-scrollbar-thumb {
-  background: #ff66b2;
-  border: 1.5px solid #1c1822;
+  background: var(--scroll-thumb);
+  border: 1.5px solid var(--border-color);
+  border-radius: 3px;
 }
 
 /* --- Chat Rows & Bubbles --- */
@@ -366,7 +371,7 @@ html {
   line-height: 1.35;
   word-wrap: break-word;
   font-weight: 600;
-  border: 2px solid #1c1822;
+  border: 2px solid var(--border-color);
 }
 
 .chat-bubble p {
@@ -375,10 +380,9 @@ html {
 
 /* User Bubble: Crooked Saturated Pink Sticky Note */
 .chat-bubble.user {
-  background: #ff66b2;
-  /* TV Girl Pink */
-  color: #1c1822;
-  box-shadow: 2px 2px 0px #1c1822;
+  background: var(--user-bubble-bg);
+  color: var(--user-bubble-fg);
+  box-shadow: 2px 2px 0px var(--border-color);
   border-radius: 2px;
   transform: rotate(-1.5deg);
   /* Physical tape skew effect */
@@ -386,23 +390,21 @@ html {
 
 /* Assistant Bubble: Dark Tape with Fuchsia Border */
 .chat-bubble.assistant {
-  background: #38bdf8 !important;
-  /* TV Girl Sky Blue */
-  border: 2px solid #1c1822;
-  /* Clean black border */
-  box-shadow: 2px 2px 0px #1c1822;
+  background: var(--assistant-bubble-bg) !important;
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
   border-radius: 4px;
   padding-right: 24px;
   /* Space for the absolute copy icon */
 }
 
-/* Force black text color inside assistant bubble for absolute legibility */
+/* Force text color inside assistant bubble for absolute legibility */
 .chat-bubble.assistant,
 .chat-bubble.assistant p,
 .chat-bubble.assistant span,
 .chat-bubble.assistant li,
 .chat-bubble.assistant strong {
-  color: #1c1822 !important;
+  color: var(--assistant-bubble-fg) !important;
 }
 
 /* Bubble Copy Button */
@@ -410,10 +412,9 @@ html {
   position: absolute;
   top: 4px;
   right: 4px;
-  background: #ff66b2;
-  /* TV Girl Saturated Pink button overlay */
-  border: 1.5px solid #1c1822;
-  box-shadow: 1px 1px 0px #1c1822;
+  background: var(--primary-color);
+  border: 1.5px solid var(--border-color);
+  box-shadow: 1px 1px 0px var(--border-color);
   font-size: 0.85em;
   cursor: pointer;
   padding: 1px 3px;
@@ -423,7 +424,7 @@ html {
   justify-content: center;
   transition: transform 0.05s, box-shadow 0.05s;
   user-select: none;
-  color: #1c1822;
+  color: var(--border-color);
 }
 
 .copy-button:hover {
