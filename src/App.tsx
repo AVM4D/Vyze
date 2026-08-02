@@ -462,9 +462,9 @@ function App() {
     <div className="hud-container">
       <div className="hud-card">
         {/* Absolute Crooked Sticker Tab Header (Pops out of the card container) */}
-        <div className="hud-header">
-          <div className="hud-brand">
-            <span className="hud-title">VYZE</span>
+        <div className="hud-header" data-tauri-drag-region>
+          <div className="hud-brand" data-tauri-drag-region>
+            <span className="hud-title" data-tauri-drag-region>VYZE</span>
           </div>
         </div>
 

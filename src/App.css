@@ -69,6 +69,11 @@ html {
   z-index: 10;
   border-radius: 3px;
   transform: rotate(-1deg);
+  cursor: grab;
+}
+
+.hud-header:active {
+  cursor: grabbing;
 }
 
 /* Diagonal Stripes (Magenta and Sky Blue) */
