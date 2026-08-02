@@ -30,6 +30,26 @@ function App() {
   const [attachedImage, setAttachedImage] = useState<string | null>(null); // Holds the base64 screenshot text
   const [isCapturing, setIsCapturing] = useState(false); // Shows if the app is taking a picture right now
 
+  // Settings States
+  const [showSettings, setShowSettings] = useState(false);
+  const [autoCapture, setAutoCapture] = useState(() => localStorage.getItem("vyze_auto_capture") === "true");
+  const [theme, setTheme] = useState(() => localStorage.getItem("vyze_theme") || "tv-girl");
+
+  const autoCaptureRef = useRef(autoCapture);
+  const handleCaptureScreenRef = useRef<any>(null);
+
+  useEffect(() => {
+    autoCaptureRef.current = autoCapture;
+  }, [autoCapture]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_auto_capture", String(autoCapture));
+  }, [autoCapture]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_theme", theme);
+  }, [theme]);
+
   useEffect(() => {
     voiceStateRef.current = voiceState;
   }, [voiceState]);
@@ -278,6 +298,15 @@ function App() {
         setTimeout(() => {
           inputRef.current?.focus();
         }, 50);
+
+        // Auto-capture screen on wake if enabled
+        if (autoCaptureRef.current) {
+          setTimeout(() => {
+            if (handleCaptureScreenRef.current) {
+              handleCaptureScreenRef.current();
+            }
+          }, 100);
+        }
       });
       unlistenFn = unlisten;
     }
@@ -435,6 +464,10 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    handleCaptureScreenRef.current = handleCaptureScreen;
+  }, [handleCaptureScreen]);
+
 
   // Voice dictation submit trigger
   function handleVoiceSubmit() {
@@ -459,14 +492,65 @@ function App() {
   }
 
   return (
-    <div className="hud-container">
+    <div className={`hud-container theme-${theme}`}>
       <div className="hud-card">
         {/* Absolute Crooked Sticker Tab Header (Pops out of the card container) */}
         <div className="hud-header" data-tauri-drag-region>
           <div className="hud-brand" data-tauri-drag-region>
             <span className="hud-title" data-tauri-drag-region>VYZE</span>
           </div>
+          <button
+            type="button"
+            className="settings-toggle-btn"
+            onClick={() => setShowSettings(!showSettings)}
+            title="Toggle Settings"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
         </div>
+
+        {/* Settings Overlay */}
+        {showSettings && (
+          <div className="settings-overlay">
+            <div className="settings-card">
+              <h4 className="settings-title">SETTINGS</h4>
+              <div className="settings-option">
+                <label className="checkbox-setting-label">
+                  <input
+                    type="checkbox"
+                    className="setting-checkbox"
+                    checked={autoCapture}
+                    onChange={(e) => setAutoCapture(e.target.checked)}
+                  />
+                  <span>Capture screen on wake</span>
+                </label>
+              </div>
+              <div className="settings-option">
+                <label className="select-setting-label">Theme:</label>
+                <select
+                  className="theme-select"
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value)}
+                >
+                  <option value="tv-girl">TV Girl (Default)</option>
+                  <option value="cyberpunk">Cyberpunk</option>
+                  <option value="dracula">Dracula</option>
+                  <option value="monochrome">Monochrome</option>
+                </select>
+              </div>
+              <button
+                type="button"
+                className="settings-close-btn"
+                onClick={() => setShowSettings(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Content Section */}
         <div className="hud-content">
