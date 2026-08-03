@@ -1013,3 +1013,210 @@ html {
   transform: translate(1.5px, 1.5px);
   box-shadow: 0.5px 0.5px 0px var(--border-color);
 }
+
+/* Sidebar Drawer Toggle Button */
+.sidebar-toggle-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--brand-color);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  transition: transform 0.15s ease;
+  border-radius: 20%;
+  margin-right: 2px;
+}
+
+.sidebar-toggle-btn:hover {
+  transform: scale(1.15);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Sidebar Drawer Overlay */
+.sidebar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-input);
+  opacity: 0.98;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+  border-radius: 4px;
+}
+
+.sidebar-card {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-card);
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: 4px 4px 0px var(--shadow-color);
+  border-radius: var(--border-radius-bubble-assistant);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px dashed var(--border-color);
+  padding-bottom: 4px;
+}
+
+.sidebar-title {
+  margin: 0;
+  font-size: 0.8em;
+  font-weight: 800;
+  color: var(--primary-color);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.new-chat-btn {
+  background: var(--secondary-color);
+  color: var(--brand-color);
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: var(--font-family);
+  font-size: 0.65em;
+  font-weight: 800;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: transform 0.05s;
+}
+
+.new-chat-btn:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2.5px 2.5px 0px var(--border-color);
+}
+
+.sessions-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 2px;
+}
+
+.session-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 8px;
+  background: var(--welcome-bg);
+  border: 2px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.05s, border-color 0.1s;
+}
+
+.session-item.active {
+  border-color: var(--primary-color);
+  box-shadow: 2px 2px 0px var(--primary-color);
+}
+
+.session-item:hover {
+  transform: translate(-0.5px, -0.5px);
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.session-title-text {
+  font-size: 0.7em;
+  font-weight: 700;
+  color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-date {
+  font-size: 0.58em;
+  color: var(--muted-text-color);
+}
+
+.delete-session-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--muted-text-color);
+  cursor: pointer;
+  font-size: 0.75em;
+  padding: 2px 4px;
+}
+
+.delete-session-btn:hover {
+  color: #ef4444;
+}
+
+.session-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.rename-session-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--muted-text-color);
+  cursor: pointer;
+  font-size: 0.65em;
+  padding: 0 2px;
+  opacity: 0.6;
+  transition: opacity 0.1s;
+}
+
+.session-item:hover .rename-session-btn {
+  opacity: 1;
+}
+
+.session-rename-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-rename-input {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-color);
+  font-size: 0.68em;
+  padding: 1px 4px;
+  font-family: var(--font-family);
+  outline: none;
+  width: 130px;
+}
+
+.save-rename-btn {
+  background: var(--primary-color);
+  color: var(--border-color);
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  font-size: 0.65em;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 1px 4px;
+}

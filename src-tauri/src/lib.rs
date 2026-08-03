@@ -1,4 +1,5 @@
 mod ai;
+mod db;
 
 use base64::prelude::*;
 use std::io::Cursor;
@@ -22,6 +23,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 // AppState stores configuration settings like auto_capture in a Mutex for safe access
 pub struct AppState {
     pub auto_capture: std::sync::Mutex<bool>,
+    pub db: db::DbManager,
 }
 
 // command to toggle the auto_capture state in AppState
@@ -43,10 +45,42 @@ fn greet(name: &str) -> String {
 // - on_token: The Tauri channel that pipes tokens (words) back to React.
 #[tauri::command]
 async fn ask_vyze(
-    history: Vec<ai::ChatMessage>, // Accept the list of past messages from React
+    state: tauri::State<'_, AppState>,
+    session_id: Option<String>,
+    mut history: Vec<ai::ChatMessage>, // Accept the list of past messages from React
     provider: String,
     on_token: Channel<String>,
 ) -> Result<(), String> {
+    // 0. Triggered Memory Lookup across past sessions
+    if let Some(last_msg) = history.last() {
+        let prompt_lower = last_msg.content.to_lowercase();
+        let triggers = [
+            "remember", "recall", "search", "history", "past", "chat", "prev", "yesterday", "look up",
+        ];
+        let is_memory_query = triggers.iter().any(|t| prompt_lower.contains(t));
+
+        if is_memory_query {
+            if let Some(ref current_sid) = session_id {
+                if let Ok(search_results) =
+                    state.db.search_past_context(current_sid, &last_msg.content)
+                {
+                    if !search_results.is_empty() {
+                        let mut recall_text = String::from("\n\n[Memory recall from past sessions]:\n");
+                        for res in search_results {
+                            recall_text.push_str(&format!(
+                                "- Session '{}' ({}): {}\n",
+                                res.session_title, res.role, res.content
+                            ));
+                        }
+                        if let Some(last_msg_mut) = history.last_mut() {
+                            last_msg_mut.content.push_str(&recall_text);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // 1. Choose which AI provider to initialize
     let ai_provider: Box<dyn ai::AiProvider> = match provider.as_str() {
         "gemini" => {
@@ -84,6 +118,73 @@ async fn ask_vyze(
     }
 
     Ok(())
+}
+
+// ==========================================
+// DATABASE IPC COMMANDS
+// ==========================================
+
+#[tauri::command]
+fn db_get_sessions(state: tauri::State<'_, AppState>) -> Result<Vec<db::DbSession>, String> {
+    state.db.get_sessions().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_create_session(state: tauri::State<'_, AppState>, title: String) -> Result<String, String> {
+    state.db.create_session(&title).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_update_session_title(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    title: String,
+) -> Result<(), String> {
+    state.db.update_session_title(&id, &title).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_delete_session(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    state.db.delete_session(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_get_messages(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<Vec<db::DbMessage>, String> {
+    state.db.get_messages(&session_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_add_message(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+    role: String,
+    content: String,
+    image_base64: Option<String>,
+) -> Result<(), String> {
+    state
+        .db
+        .add_message(&session_id, &role, &content, image_base64.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_set_setting(
+    state: tauri::State<'_, AppState>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    state.db.set_setting(&key, &value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_get_setting(
+    state: tauri::State<'_, AppState>,
+    key: String,
+) -> Result<Option<String>, String> {
+    state.db.get_setting(&key).map_err(|e| e.to_string())
 }
 
 // A command that reads plain text from the system clipboard
@@ -440,9 +541,6 @@ fn show_main_window(app: tauri::AppHandle) {
 pub fn run() {
     dotenvy::dotenv().ok();
     tauri::Builder::default()
-        .manage(AppState {
-            auto_capture: std::sync::Mutex::new(false),
-        })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
@@ -452,9 +550,32 @@ pub fn run() {
             capture_selection,
             show_main_window,
             capture_active_screen,
-            set_auto_capture
+            set_auto_capture,
+            db_get_sessions,
+            db_create_session,
+            db_update_session_title,
+            db_delete_session,
+            db_get_messages,
+            db_add_message,
+            db_set_setting,
+            db_get_setting
         ])
         .setup(|app| {
+            // Initialize Database Manager
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let db_manager = db::DbManager::new(app_data_dir);
+            if let Err(e) = db_manager.init_tables() {
+                eprintln!("Failed to initialize database tables: {}", e);
+            }
+
+            app.manage(AppState {
+                auto_capture: std::sync::Mutex::new(false),
+                db: db_manager,
+            });
+
             // 1. System Tray setup
             let toggle = MenuItemBuilder::with_id("toggle", "Toggle Vyze").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;

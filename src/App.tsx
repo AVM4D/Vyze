@@ -11,6 +11,21 @@ interface Message {
   image_base64?: string | null;
 }
 
+interface DbSession {
+  id: string;
+  title: string;
+  created_at: string;
+}
+
+interface DbMessage {
+  id: number;
+  session_id: string;
+  role: string;
+  content: string;
+  image_base64?: string | null;
+  created_at: string;
+}
+
 function App() {
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -30,8 +45,13 @@ function App() {
   const [attachedImage, setAttachedImage] = useState<string | null>(null); // Holds the base64 screenshot text
   const [isCapturing, setIsCapturing] = useState(false); // Shows if the app is taking a picture right now
 
-  // Settings States
+  // Settings & Sessions States
   const [showSettings, setShowSettings] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [sessions, setSessions] = useState<DbSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitleText, setEditingTitleText] = useState("");
   const [autoCapture, setAutoCapture] = useState(() => localStorage.getItem("vyze_auto_capture") === "true");
   const [theme, setTheme] = useState(() => localStorage.getItem("vyze_theme") || "retro-pink");
 
@@ -54,6 +74,94 @@ function App() {
   useEffect(() => {
     voiceStateRef.current = voiceState;
   }, [voiceState]);
+
+  // Initialize DB & load sessions on startup
+  useEffect(() => {
+    async function initDbSessions() {
+      try {
+        const fetchedSessions = await invoke<DbSession[]>("db_get_sessions");
+        if (fetchedSessions.length > 0) {
+          setSessions(fetchedSessions);
+          const firstId = fetchedSessions[0].id;
+          setActiveSessionId(firstId);
+          await loadMessagesForSession(firstId);
+        } else {
+          // Create initial session if database is fresh
+          const newId = await invoke<string>("db_create_session", { title: "New Chat" });
+          const newSession = { id: newId, title: "New Chat", created_at: new Date().toISOString() };
+          setSessions([newSession]);
+          setActiveSessionId(newId);
+          setMessages([]);
+        }
+      } catch (err) {
+        console.error("Failed to load sessions from database:", err);
+      }
+    }
+    initDbSessions();
+  }, []);
+
+  async function loadMessagesForSession(sid: string) {
+    try {
+      const dbMsgs = await invoke<DbMessage[]>("db_get_messages", { sessionId: sid });
+      const converted: Message[] = dbMsgs.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        image_base64: m.image_base64,
+      }));
+      setMessages(converted);
+    } catch (err) {
+      console.error("Failed to load messages for session:", err);
+    }
+  }
+
+  async function handleCreateNewSession() {
+    try {
+      const newId = await invoke<string>("db_create_session", { title: "New Chat" });
+      const updated = await invoke<DbSession[]>("db_get_sessions");
+      setSessions(updated);
+      setActiveSessionId(newId);
+      setMessages([]);
+      setShowSidebar(false);
+    } catch (err) {
+      console.error("Failed to create new session:", err);
+    }
+  }
+
+  async function handleSelectSession(sid: string) {
+    setActiveSessionId(sid);
+    await loadMessagesForSession(sid);
+    setShowSidebar(false);
+  }
+
+  async function handleDeleteSession(sid: string) {
+    try {
+      await invoke("db_delete_session", { id: sid });
+      const updated = await invoke<DbSession[]>("db_get_sessions");
+      setSessions(updated);
+      if (activeSessionId === sid) {
+        if (updated.length > 0) {
+          setActiveSessionId(updated[0].id);
+          await loadMessagesForSession(updated[0].id);
+        } else {
+          const newId = await invoke<string>("db_create_session", { title: "New Chat" });
+          const newSessions = await invoke<DbSession[]>("db_get_sessions");
+          setSessions(newSessions);
+          setActiveSessionId(newId);
+          setMessages([]);
+        }
+      }
+    } catch (err) {
+  async function handleSaveRenameSession(sid: string, newTitle: string) {
+    if (!newTitle.trim()) return;
+    try {
+      await invoke("db_update_session_title", { id: sid, title: newTitle.trim() });
+      const updated = await invoke<DbSession[]>("db_get_sessions");
+      setSessions(updated);
+      setEditingSessionId(null);
+    } catch (err) {
+      console.error("Failed to rename session:", err);
+    }
+  }
 
   // Warm up system voices inventory on boot
   useEffect(() => {
@@ -381,6 +489,26 @@ function App() {
     const newHistory = [...messages, userMsg];
     const payloadHistory = [...messages, userMsgWithContext];
 
+    // Sync user message to SQLite DB
+    if (activeSessionId) {
+      invoke("db_add_message", {
+        sessionId: activeSessionId,
+        role: "user",
+        content: promptText,
+        imageBase64: attachedImage
+      }).catch(console.error);
+
+      // Auto-rename session if default title
+      const currentSession = sessions.find((s) => s.id === activeSessionId);
+      if (currentSession && (currentSession.title === "New Chat" || currentSession.title.trim() === "")) {
+        const shortTitle = promptText.length > 20 ? promptText.slice(0, 20) + "..." : promptText;
+        invoke("db_update_session_title", { id: activeSessionId, title: shortTitle }).catch(console.error);
+        setSessions((prev) =>
+          prev.map((s) => (s.id === activeSessionId ? { ...s, title: shortTitle } : s))
+        );
+      }
+    }
+
     setMessages([...newHistory, { role: "assistant", content: "" }]);
     setSelectedText(""); // Clear selected context since it was consumed
     setAttachedImage(null); // Clear screenshot after sending it!
@@ -408,10 +536,21 @@ function App() {
 
       // Call AI streaming command in Rust
       await invoke("ask_vyze", {
+        sessionId: activeSessionId,
         history: payloadHistory,
         provider: provider,
         onToken: tokenChannel
       });
+
+      // Sync assistant response to SQLite DB
+      if (activeSessionId && fullResponse.trim()) {
+        invoke("db_add_message", {
+          sessionId: activeSessionId,
+          role: "assistant",
+          content: fullResponse,
+          imageBase64: null
+        }).catch(console.error);
+      }
 
       // Auto-copy response to clipboard if active
       if (autoCopy && fullResponse.trim()) {
@@ -529,18 +668,130 @@ function App() {
           <div className="hud-brand" data-tauri-drag-region>
             <span className="hud-title" data-tauri-drag-region>VYZE</span>
           </div>
-          <button
-            type="button"
-            className="settings-toggle-btn"
-            onClick={() => setShowSettings(!showSettings)}
-            title="Toggle Settings"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-          </button>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <button
+              type="button"
+              className="sidebar-toggle-btn"
+              onClick={() => {
+                setShowSidebar(!showSidebar);
+                if (showSettings) setShowSettings(false);
+              }}
+              title="Chat History"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="settings-toggle-btn"
+              onClick={() => {
+                setShowSettings(!showSettings);
+                if (showSidebar) setShowSidebar(false);
+              }}
+              title="Toggle Settings"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* Sessions History Sidebar Overlay */}
+        {showSidebar && (
+          <div className="sidebar-overlay">
+            <div className="sidebar-card">
+              <div className="sidebar-header">
+                <h4 className="sidebar-title">HISTORY</h4>
+                <button
+                  type="button"
+                  className="new-chat-btn"
+                  onClick={handleCreateNewSession}
+                  title="Start New Chat"
+                >
+                  + NEW CHAT
+                </button>
+              </div>
+              <div className="sessions-list">
+                {sessions.map((s) => (
+                  <div
+                    key={s.id}
+                    className={`session-item ${s.id === activeSessionId ? "active" : ""}`}
+                    onClick={() => handleSelectSession(s.id)}
+                  >
+                    <div className="session-info">
+                      {editingSessionId === s.id ? (
+                        <div className="session-rename-container" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            className="session-rename-input"
+                            value={editingTitleText}
+                            onChange={(e) => setEditingTitleText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveRenameSession(s.id, editingTitleText);
+                              if (e.key === "Escape") setEditingSessionId(null);
+                            }}
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            className="save-rename-btn"
+                            onClick={() => handleSaveRenameSession(s.id, editingTitleText)}
+                          >
+                            ✓
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="session-title-row">
+                            <span className="session-title-text">{s.title}</span>
+                            <button
+                              type="button"
+                              className="rename-session-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingSessionId(s.id);
+                                setEditingTitleText(s.title);
+                              }}
+                              title="Rename chat"
+                            >
+                              ✎
+                            </button>
+                          </div>
+                          <span className="session-date">
+                            {new Date(s.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="delete-session-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteSession(s.id);
+                      }}
+                      title="Delete chat"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="settings-close-btn"
+                onClick={() => setShowSidebar(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Settings Overlay */}
         {showSettings && (
