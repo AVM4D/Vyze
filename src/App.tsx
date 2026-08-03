@@ -540,7 +540,8 @@ function App() {
         sessionId: currentSid,
         role: "user",
         content: promptText,
-        imageBase64: attachedImage
+        imageBase64: attachedImage,
+        provider: provider
       }).catch(console.error);
 
       // Auto-rename session if default title
@@ -593,7 +594,8 @@ function App() {
           sessionId: currentSid,
           role: "assistant",
           content: fullResponse,
-          imageBase64: null
+          imageBase64: null,
+          provider: provider
         }).catch(console.error);
       }
 

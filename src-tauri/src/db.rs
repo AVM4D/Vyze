@@ -40,6 +40,14 @@ impl DbManager {
         Self { db_path }
     }
 
+    pub fn from_db_path(db_path: PathBuf) -> Self {
+        Self { db_path }
+    }
+
+    pub fn get_db_path(&self) -> PathBuf {
+        self.db_path.clone()
+    }
+
     fn get_connection(&self) -> Result<Connection> {
         Connection::open(&self.db_path)
     }
@@ -84,7 +92,21 @@ impl DbManager {
             [],
         )?;
 
-        // 4. Settings table
+        // 4. Vector Embeddings Table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS message_embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id INTEGER NOT NULL,
+                session_id TEXT NOT NULL,
+                embedding_json TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,
+                FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        // 5. Settings table
         conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -138,6 +160,10 @@ impl DbManager {
     pub fn delete_session(&self, session_id: &str) -> Result<()> {
         let conn = self.get_connection()?;
         let _ = conn.execute(
+            "DELETE FROM message_embeddings WHERE session_id = ?1",
+            params![session_id],
+        );
+        let _ = conn.execute(
             "DELETE FROM messages_fts WHERE session_id = ?1",
             params![session_id],
         );
@@ -156,7 +182,7 @@ impl DbManager {
         role: &str,
         content: &str,
         image_base64: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<i64> {
         let conn = self.get_connection()?;
 
         // Insert into normal table
@@ -164,6 +190,7 @@ impl DbManager {
             "INSERT INTO messages (session_id, role, content, image_base64) VALUES (?1, ?2, ?3, ?4)",
             params![session_id, role, content, image_base64],
         )?;
+        let msg_id = conn.last_insert_rowid();
 
         // Insert into FTS table (only index non-empty text)
         if !content.trim().is_empty() {
@@ -173,7 +200,7 @@ impl DbManager {
             );
         }
 
-        Ok(())
+        Ok(msg_id)
     }
 
     pub fn get_messages(&self, session_id: &str) -> Result<Vec<DbMessage>> {
@@ -200,7 +227,100 @@ impl DbManager {
         Ok(list)
     }
 
-    // Cross-Session Recall API: Returns recent message context from OTHER sessions
+    // Vector Embeddings API
+    pub fn add_message_embedding(
+        &self,
+        message_id: i64,
+        session_id: &str,
+        vector: &[f32],
+    ) -> Result<()> {
+        let conn = self.get_connection()?;
+        let json_str = serde_json::to_string(vector).unwrap_or_default();
+        conn.execute(
+            "INSERT INTO message_embeddings (message_id, session_id, embedding_json) VALUES (?1, ?2, ?3)",
+            params![message_id, session_id, json_str],
+        )?;
+        Ok(())
+    }
+
+    /// Computes the Cosine Similarity between two equal-length vectors.
+    pub fn cosine_similarity(v1: &[f32], v2: &[f32]) -> f32 {
+        if v1.len() != v2.len() || v1.is_empty() {
+            return 0.0;
+        }
+        let mut dot = 0.0f32;
+        let mut norm_a = 0.0f32;
+        let mut norm_b = 0.0f32;
+
+        for i in 0..v1.len() {
+            dot += v1[i] * v2[i];
+            norm_a += v1[i] * v1[i];
+            norm_b += v2[i] * v2[i];
+        }
+
+        if norm_a == 0.0 || norm_b == 0.0 {
+            return 0.0;
+        }
+
+        dot / (norm_a.sqrt() * norm_b.sqrt())
+    }
+
+    /// Searches past sessions using Cosine Similarity against high-dimensional vector embeddings.
+    pub fn semantic_search_past_context(
+        &self,
+        current_session_id: &str,
+        query_vector: &[f32],
+        top_k: usize,
+        threshold: f32,
+    ) -> Result<Vec<SearchResult>> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT e.message_id, e.session_id, s.title, m.role, m.content, e.embedding_json, m.created_at
+             FROM message_embeddings e
+             JOIN messages m ON e.message_id = m.id
+             JOIN sessions s ON e.session_id = s.id
+             WHERE e.session_id != ?1 AND m.content != ''",
+        )?;
+
+        let rows = stmt.query_map(params![current_session_id], |row| {
+            let session_id: String = row.get(1)?;
+            let title: String = row.get(2)?;
+            let role: String = row.get(3)?;
+            let content: String = row.get(4)?;
+            let json_str: String = row.get(5)?;
+            let created_at: String = row.get(6)?;
+            let vector: Vec<f32> = serde_json::from_str(&json_str).unwrap_or_default();
+
+            Ok((session_id, title, role, content, vector, created_at))
+        })?;
+
+        let mut candidates = Vec::new();
+        for r in rows {
+            if let Ok((sid, title, role, content, vec, created_at)) = r {
+                let score = Self::cosine_similarity(query_vector, &vec);
+                if score >= threshold {
+                    candidates.push((
+                        score,
+                        SearchResult {
+                            session_id: sid,
+                            session_title: title,
+                            role,
+                            content,
+                            created_at,
+                        },
+                    ));
+                }
+            }
+        }
+
+        // Sort candidates by highest cosine similarity score
+        candidates.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.truncate(top_k);
+
+        Ok(candidates.into_iter().map(|(_, res)| res).collect())
+    }
+
+    // Fallback search
     pub fn search_past_context(
         &self,
         current_session_id: &str,

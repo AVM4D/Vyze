@@ -137,6 +137,7 @@ html {
   height: 100vh;
   padding: 10px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .hud-card {
@@ -158,7 +159,6 @@ html {
   position: relative;
   justify-content: space-between;
   gap: 6px;
-  overflow-x: hidden;
 }
 
 /* --- Overlapping TV Girl Sticker Tab (Pink + Cyan/Black Stripes) --- */

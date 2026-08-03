@@ -1,5 +1,6 @@
 mod ai;
 mod db;
+mod embeddings;
 
 use base64::prelude::*;
 use std::io::Cursor;
@@ -61,20 +62,32 @@ async fn ask_vyze(
 
         if is_memory_query {
             if let Some(ref current_sid) = session_id {
-                if let Ok(search_results) =
-                    state.db.search_past_context(current_sid, &last_msg.content)
-                {
-                    if !search_results.is_empty() {
-                        let mut recall_text = String::from("\n\n[Memory recall from past sessions]:\n");
-                        for res in search_results {
-                            recall_text.push_str(&format!(
-                                "- Session '{}' ({}): {}\n",
-                                res.session_title, res.role, res.content
-                            ));
-                        }
-                        if let Some(last_msg_mut) = history.last_mut() {
-                            last_msg_mut.content.push_str(&recall_text);
-                        }
+                let mut search_results = Vec::new();
+
+                // 1. Attempt Vector Embedding Semantic Search
+                if let Ok(query_vec) = embeddings::generate_embedding(&last_msg.content, &provider).await {
+                    if let Ok(vec_results) = state.db.semantic_search_past_context(current_sid, &query_vec, 5, 0.45) {
+                        search_results = vec_results;
+                    }
+                }
+
+                // 2. Fallback to recent chat history if vector embeddings empty
+                if search_results.is_empty() {
+                    if let Ok(fts_results) = state.db.search_past_context(current_sid, &last_msg.content) {
+                        search_results = fts_results;
+                    }
+                }
+
+                if !search_results.is_empty() {
+                    let mut recall_text = String::from("\n\n[Memory recall from past sessions]:\n");
+                    for res in search_results {
+                        recall_text.push_str(&format!(
+                            "- Session '{}' ({}): {}\n",
+                            res.session_title, res.role, res.content
+                        ));
+                    }
+                    if let Some(last_msg_mut) = history.last_mut() {
+                        last_msg_mut.content.push_str(&recall_text);
                     }
                 }
             }
@@ -157,17 +170,34 @@ fn db_get_messages(
 }
 
 #[tauri::command]
-fn db_add_message(
+async fn db_add_message(
     state: tauri::State<'_, AppState>,
     session_id: String,
     role: String,
     content: String,
     image_base64: Option<String>,
-) -> Result<(), String> {
-    state
+    provider: Option<String>,
+) -> Result<i64, String> {
+    let msg_id = state
         .db
         .add_message(&session_id, &role, &content, image_base64.as_deref())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    let content_clone = content.clone();
+    let provider_name = provider.unwrap_or_else(|| "gemini".to_string());
+    let db_path = state.db.get_db_path();
+    let session_id_clone = session_id.clone();
+
+    if !content_clone.trim().is_empty() {
+        tauri::async_runtime::spawn(async move {
+            if let Ok(vector) = embeddings::generate_embedding(&content_clone, &provider_name).await {
+                let db = db::DbManager::from_db_path(db_path);
+                let _ = db.add_message_embedding(msg_id, &session_id_clone, &vector);
+            }
+        });
+    }
+
+    Ok(msg_id)
 }
 
 #[tauri::command]
