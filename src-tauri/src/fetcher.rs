@@ -3,7 +3,8 @@ use std::path::Path;
 use std::time::Duration;
 
 /// Fetches a web URL and converts its readable HTML content into clean Markdown.
-pub async fn fetch_url_markdown(url: &str) -> Result<String, String> {
+/// If `max_chars` is `None`, the full document is returned without truncation.
+pub async fn fetch_url_markdown(url: &str, max_chars: Option<usize>) -> Result<String, String> {
     let client = Client::builder()
         .timeout(Duration::from_secs(10))
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -26,13 +27,18 @@ pub async fn fetch_url_markdown(url: &str) -> Result<String, String> {
         .map_err(|e| format!("Failed to read HTML body: {}", e))?;
 
     let markdown = html_to_markdown(&html);
-    
-    // Limit to max 12,000 characters to protect AI token limits
-    if markdown.len() > 12000 {
-        Ok(format!("{}...\n\n[Content truncated at 12,000 characters]", &markdown[..12000]))
-    } else {
-        Ok(markdown)
+
+    if let Some(limit) = max_chars {
+        if markdown.len() > limit {
+            return Ok(format!(
+                "{}...\n\n[Content truncated at {} characters]",
+                &markdown[..limit],
+                limit
+            ));
+        }
     }
+
+    Ok(markdown)
 }
 
 /// Simple regex-free HTML-to-Markdown noise stripper.
@@ -58,22 +64,22 @@ fn html_to_markdown(html: &str) -> String {
 
     // 2. Convert common HTML tags to Markdown equivalents
     text = text.replace("<h1>", "\n# ")
-               .replace("</h1>", "\n")
-               .replace("<h2>", "\n## ")
-               .replace("</h2>", "\n")
-               .replace("<h3>", "\n### ")
-               .replace("</h3>", "\n")
-               .replace("<p>", "\n")
-               .replace("</p>", "\n")
-               .replace("<br>", "\n")
-               .replace("<br/>", "\n")
-               .replace("<br />", "\n")
-               .replace("<code>", "`")
-               .replace("</code>", "`")
-               .replace("<pre>", "\n```\n")
-               .replace("</pre>", "\n```\n")
-               .replace("<li>", "\n- ")
-               .replace("</li>", "");
+        .replace("</h1>", "\n")
+        .replace("<h2>", "\n## ")
+        .replace("</h2>", "\n")
+        .replace("<h3>", "\n### ")
+        .replace("</h3>", "\n")
+        .replace("<p>", "\n")
+        .replace("</p>", "\n")
+        .replace("<br>", "\n")
+        .replace("<br/>", "\n")
+        .replace("<br />", "\n")
+        .replace("<code>", "`")
+        .replace("</code>", "`")
+        .replace("<pre>", "\n```\n")
+        .replace("</pre>", "\n```\n")
+        .replace("<li>", "\n- ")
+        .replace("</li>", "");
 
     // 3. Strip all remaining HTML tags
     let mut in_tag = false;
@@ -99,7 +105,8 @@ fn html_to_markdown(html: &str) -> String {
 }
 
 /// Reads a local text file from disk safely.
-pub async fn read_file_content(path_str: &str) -> Result<String, String> {
+/// If `max_chars` is `None`, the full file content is returned without truncation.
+pub async fn read_file_content(path_str: &str, max_chars: Option<usize>) -> Result<String, String> {
     let clean_path = path_str.trim().trim_matches('"').trim_matches('\'');
     let path = Path::new(clean_path);
 
@@ -115,10 +122,15 @@ pub async fn read_file_content(path_str: &str) -> Result<String, String> {
         .await
         .map_err(|e| format!("Failed to read file '{}': {}", clean_path, e))?;
 
-    // Limit to max 15,000 characters
-    if content.len() > 15000 {
-        Ok(format!("```\n{}...\n[File truncated at 15,000 characters]\n```", &content[..15000]))
-    } else {
-        Ok(format!("```\n{}\n```", content))
+    if let Some(limit) = max_chars {
+        if content.len() > limit {
+            return Ok(format!(
+                "```\n{}...\n[File truncated at {} characters]\n```",
+                &content[..limit],
+                limit
+            ));
+        }
     }
+
+    Ok(format!("```\n{}\n```", content))
 }

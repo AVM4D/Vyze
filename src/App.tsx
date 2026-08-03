@@ -55,8 +55,18 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitleText, setEditingTitleText] = useState("");
-  const [autoCapture, setAutoCapture] = useState(() => localStorage.getItem("vyze_auto_capture") === "true");
-  const [theme, setTheme] = useState(() => localStorage.getItem("vyze_theme") || "retro-pink");
+  const [truncateContext, setTruncateContext] = useState(false);
+
+  useEffect(() => {
+    invoke<string | null>("db_get_setting", { key: "truncate_resource_context" })
+      .then((val) => setTruncateContext(val === "true"))
+      .catch(console.error);
+  }, []);
+
+  function handleToggleTruncate(checked: boolean) {
+    setTruncateContext(checked);
+    invoke("db_set_setting", { key: "truncate_resource_context", value: String(checked) }).catch(console.error);
+  }
 
   const autoCaptureRef = useRef(autoCapture);
   const handleCaptureScreenRef = useRef<any>(null);
@@ -926,6 +936,17 @@ function App() {
                     onChange={(e) => setAutoCapture(e.target.checked)}
                   />
                   <span>Capture screen on wake</span>
+                </label>
+              </div>
+              <div className="settings-option">
+                <label className="checkbox-setting-label">
+                  <input
+                    type="checkbox"
+                    className="setting-checkbox"
+                    checked={truncateContext}
+                    onChange={(e) => handleToggleTruncate(e.target.checked)}
+                  />
+                  <span>Limit File & Web Context (Cap at 15k chars)</span>
                 </label>
               </div>
               <div className="settings-option">

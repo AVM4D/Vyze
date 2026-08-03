@@ -99,6 +99,14 @@ async fn ask_vyze(
     }
 
     // 0.5. Automatic Web URL and Local File Resource Ingestion
+    let should_truncate = state
+        .db
+        .get_setting("truncate_resource_context")
+        .unwrap_or(None)
+        .unwrap_or_else(|| "false".to_string()) == "true";
+
+    let max_chars = if should_truncate { Some(15000) } else { None };
+
     if let Some(last_msg_mut) = history.last_mut() {
         let content = last_msg_mut.content.clone();
         let words: Vec<&str> = content.split_whitespace().collect();
@@ -108,7 +116,7 @@ async fn ask_vyze(
             
             // Check for HTTP / HTTPS Web URLs
             if clean_word.starts_with("http://") || clean_word.starts_with("https://") {
-                if let Ok(web_markdown) = fetcher::fetch_url_markdown(clean_word).await {
+                if let Ok(web_markdown) = fetcher::fetch_url_markdown(clean_word, max_chars).await {
                     last_msg_mut.content.push_str(&format!(
                         "\n\n[Attached Web Document from '{}']:\n{}\n",
                         clean_word, web_markdown
@@ -117,7 +125,7 @@ async fn ask_vyze(
             }
             // Check for Local File Paths
             else if clean_word.contains('/') || clean_word.contains('\\') || clean_word.ends_with(".rs") || clean_word.ends_with(".tsx") || clean_word.ends_with(".ts") || clean_word.ends_with(".json") || clean_word.ends_with(".toml") || clean_word.ends_with(".md") || clean_word.ends_with(".py") {
-                if let Ok(file_content) = fetcher::read_file_content(clean_word).await {
+                if let Ok(file_content) = fetcher::read_file_content(clean_word, max_chars).await {
                     last_msg_mut.content.push_str(&format!(
                         "\n\n[Attached File Content from '{}']:\n{}\n",
                         clean_word, file_content
