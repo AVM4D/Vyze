@@ -708,6 +708,18 @@ html {
   box-shadow: none;
 }
 
+/* Pulsing Red LED & Button for Active Recording */
+.voice-led.recording {
+  background-color: #ef4444 !important;
+  box-shadow: 0 0 6px #ef4444;
+  animation: ledPulse 0.4s infinite alternate;
+}
+
+.voice-toggle-btn.recording {
+  border-color: #ef4444;
+  box-shadow: 2px 2px 0px #ef4444;
+}
+
 /* Stop Speech Button */
 .stop-speech-btn {
   background: #ef4444;

@@ -1,6 +1,8 @@
 mod ai;
+mod audio;
 mod db;
 mod embeddings;
+mod stt;
 
 use base64::prelude::*;
 use std::io::Cursor;
@@ -25,6 +27,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 pub struct AppState {
     pub auto_capture: std::sync::Mutex<bool>,
     pub db: db::DbManager,
+    pub audio_recorder: std::sync::Mutex<audio::AudioRecorder>,
 }
 
 // command to toggle the auto_capture state in AppState
@@ -215,6 +218,33 @@ fn db_get_setting(
     key: String,
 ) -> Result<Option<String>, String> {
     state.db.get_setting(&key).map_err(|e| e.to_string())
+}
+
+// ==========================================
+// VOICE & STT IPC COMMANDS
+// ==========================================
+
+#[tauri::command]
+fn start_voice_recording(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if let Ok(mut recorder) = state.audio_recorder.lock() {
+        recorder.start_recording()?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn stop_voice_recording(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let samples = if let Ok(mut recorder) = state.audio_recorder.lock() {
+        recorder.stop_recording()?
+    } else {
+        Vec::new()
+    };
+
+    if samples.is_empty() {
+        return Ok(String::new());
+    }
+
+    stt::transcribe_audio(&samples).await
 }
 
 // A command that reads plain text from the system clipboard
@@ -588,7 +618,9 @@ pub fn run() {
             db_get_messages,
             db_add_message,
             db_set_setting,
-            db_get_setting
+            db_get_setting,
+            start_voice_recording,
+            stop_voice_recording
         ])
         .setup(|app| {
             // Initialize Database Manager
@@ -604,6 +636,7 @@ pub fn run() {
             app.manage(AppState {
                 auto_capture: std::sync::Mutex::new(false),
                 db: db_manager,
+                audio_recorder: std::sync::Mutex::new(audio::AudioRecorder::new()),
             });
 
             // 1. System Tray setup

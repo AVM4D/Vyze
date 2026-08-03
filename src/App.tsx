@@ -423,6 +423,33 @@ function App() {
     };
   }, [voiceState, voiceActive]);
 
+  // Native WASAPI Voice Dictation handler
+  async function handleToggleVoice() {
+    if (voiceState === "dictating") {
+      setVoiceState("standby");
+      try {
+        setIsLoading(true);
+        const transcribedText = await invoke<string>("stop_voice_recording");
+        if (transcribedText.trim()) {
+          setPrompt((prev) => (prev ? `${prev} ${transcribedText.trim()}` : transcribedText.trim()));
+          playBeep();
+        }
+      } catch (err) {
+        console.error("Voice transcription failed:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      try {
+        await invoke("start_voice_recording");
+        setVoiceState("dictating");
+        playBeep();
+      } catch (err) {
+        console.error("Failed to start native recording:", err);
+      }
+    }
+  }
+
   // 1. Listen for the global selection and silent screen capture events from Rust
   useEffect(() => {
     let unlistenTextFn: (() => void) | null = null;
@@ -930,16 +957,16 @@ function App() {
           {/* Controls Bar (Voice Switch + Provider Select) */}
           <div className="controls-bar">
 
-            {/* Voice Activation Switch */}
+            {/* Native Voice Dictation Switch */}
             <button
               type="button"
-              className={`voice-toggle-btn ${voiceActive ? "active" : "muted"}`}
-              onClick={() => setVoiceActive(!voiceActive)}
-              title={voiceActive ? `Mute Voice (State: ${voiceState})` : "Unmute Voice"}
+              className={`voice-toggle-btn ${voiceState === "dictating" ? "recording" : "active"}`}
+              onClick={handleToggleVoice}
+              title={voiceState === "dictating" ? "Click to Stop & Transcribe" : "Click to Speak"}
             >
-              <span className={`voice-led ${voiceActive ? voiceState : "disabled"}`}></span>
+              <span className={`voice-led ${voiceState === "dictating" ? "recording" : voiceState}`}></span>
               <span className="voice-text">
-                {!voiceActive ? "VOICE: OFF" : `VOICE: ${voiceState.toUpperCase()}`}
+                {voiceState === "dictating" ? "RECORDING..." : `VOICE: ${voiceState.toUpperCase()}`}
               </span>
             </button>
 
