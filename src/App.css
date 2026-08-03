@@ -1084,6 +1084,26 @@ html {
   text-transform: uppercase;
 }
 
+.clear-all-btn {
+  background: #ef4444;
+  color: #ffffff;
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: var(--font-family);
+  font-size: 0.65em;
+  font-weight: 800;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: transform 0.05s;
+}
+
+.clear-all-btn:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2.5px 2.5px 0px var(--border-color);
+}
+
 .new-chat-btn {
   background: var(--secondary-color);
   color: var(--brand-color);

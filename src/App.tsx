@@ -29,9 +29,12 @@ interface DbMessage {
 function App() {
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [provider, setProvider] = useState("gemini");
+  // Settings & Preferences States
+  const [defaultProvider, setDefaultProvider] = useState(() => localStorage.getItem("vyze_default_provider") || "gemini");
+  const [provider, setProvider] = useState(() => localStorage.getItem("vyze_default_provider") || "gemini");
   const [isLoading, setIsLoading] = useState(false);
-  const [autoCopy, setAutoCopy] = useState(false); // Auto-copy AI responses
+  const [autoCopy, setAutoCopy] = useState(() => localStorage.getItem("vyze_auto_copy") === "true");
+  const [voiceNarration, setVoiceNarration] = useState(() => localStorage.getItem("vyze_voice_narration") !== "false");
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null); // Track copied bubble index
   const [selectedText, setSelectedText] = useState(""); // Track highlighted selection
   const inputRef = useRef<HTMLInputElement>(null); // Ref to auto-focus prompt bar
@@ -66,6 +69,19 @@ function App() {
     localStorage.setItem("vyze_auto_capture", String(autoCapture));
     invoke("set_auto_capture", { enabled: autoCapture }).catch(console.error);
   }, [autoCapture]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_default_provider", defaultProvider);
+    setProvider(defaultProvider);
+  }, [defaultProvider]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_auto_copy", String(autoCopy));
+  }, [autoCopy]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_voice_narration", String(voiceNarration));
+  }, [voiceNarration]);
 
   useEffect(() => {
     localStorage.setItem("vyze_theme", theme);
@@ -143,14 +159,29 @@ function App() {
           setActiveSessionId(updated[0].id);
           await loadMessagesForSession(updated[0].id);
         } else {
-          const newId = await invoke<string>("db_create_session", { title: "New Chat" });
-          const newSessions = await invoke<DbSession[]>("db_get_sessions");
-          setSessions(newSessions);
-          setActiveSessionId(newId);
+          setActiveSessionId(null);
           setMessages([]);
         }
       }
     } catch (err) {
+      console.error("Failed to delete session:", err);
+    }
+  }
+
+  async function handleClearAllSessions() {
+    try {
+      for (const s of sessions) {
+        await invoke("db_delete_session", { id: s.id });
+      }
+      setSessions([]);
+      setActiveSessionId(null);
+      setMessages([]);
+      setShowSidebar(false);
+    } catch (err) {
+      console.error("Failed to clear sessions:", err);
+    }
+  }
+
   async function handleSaveRenameSession(sid: string, newTitle: string) {
     if (!newTitle.trim()) return;
     try {
@@ -489,22 +520,36 @@ function App() {
     const newHistory = [...messages, userMsg];
     const payloadHistory = [...messages, userMsgWithContext];
 
+    // Handle lazy session creation if no session is active
+    let currentSid = activeSessionId;
+    if (!currentSid) {
+      const initialTitle = promptText.length > 20 ? promptText.slice(0, 20) + "..." : promptText;
+      try {
+        currentSid = await invoke<string>("db_create_session", { title: initialTitle });
+        const updatedSessions = await invoke<DbSession[]>("db_get_sessions");
+        setSessions(updatedSessions);
+        setActiveSessionId(currentSid);
+      } catch (err) {
+        console.error("Failed to create session on submit:", err);
+      }
+    }
+
     // Sync user message to SQLite DB
-    if (activeSessionId) {
+    if (currentSid) {
       invoke("db_add_message", {
-        sessionId: activeSessionId,
+        sessionId: currentSid,
         role: "user",
         content: promptText,
         imageBase64: attachedImage
       }).catch(console.error);
 
       // Auto-rename session if default title
-      const currentSession = sessions.find((s) => s.id === activeSessionId);
+      const currentSession = sessions.find((s) => s.id === currentSid);
       if (currentSession && (currentSession.title === "New Chat" || currentSession.title.trim() === "")) {
         const shortTitle = promptText.length > 20 ? promptText.slice(0, 20) + "..." : promptText;
-        invoke("db_update_session_title", { id: activeSessionId, title: shortTitle }).catch(console.error);
+        invoke("db_update_session_title", { id: currentSid, title: shortTitle }).catch(console.error);
         setSessions((prev) =>
-          prev.map((s) => (s.id === activeSessionId ? { ...s, title: shortTitle } : s))
+          prev.map((s) => (s.id === currentSid ? { ...s, title: shortTitle } : s))
         );
       }
     }
@@ -536,16 +581,16 @@ function App() {
 
       // Call AI streaming command in Rust
       await invoke("ask_vyze", {
-        sessionId: activeSessionId,
+        sessionId: currentSid,
         history: payloadHistory,
         provider: provider,
         onToken: tokenChannel
       });
 
       // Sync assistant response to SQLite DB
-      if (activeSessionId && fullResponse.trim()) {
+      if (currentSid && fullResponse.trim()) {
         invoke("db_add_message", {
-          sessionId: activeSessionId,
+          sessionId: currentSid,
           role: "assistant",
           content: fullResponse,
           imageBase64: null
@@ -557,8 +602,8 @@ function App() {
         await invoke("write_clipboard", { text: fullResponse });
       }
 
-      // Read response aloud if voice features are active
-      if (voiceActive) {
+      // Read response aloud if voice narration is active
+      if (voiceNarration) {
         speakText(fullResponse);
       } else {
         setVoiceState("standby");
@@ -707,14 +752,26 @@ function App() {
             <div className="sidebar-card">
               <div className="sidebar-header">
                 <h4 className="sidebar-title">HISTORY</h4>
-                <button
-                  type="button"
-                  className="new-chat-btn"
-                  onClick={handleCreateNewSession}
-                  title="Start New Chat"
-                >
-                  + NEW CHAT
-                </button>
+                <div style={{ display: "flex", gap: "4px" }}>
+                  {sessions.length > 0 && (
+                    <button
+                      type="button"
+                      className="clear-all-btn"
+                      onClick={handleClearAllSessions}
+                      title="Clear All History"
+                    >
+                      CLEAR ALL
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="new-chat-btn"
+                    onClick={handleCreateNewSession}
+                    title="Start New Chat"
+                  >
+                    + NEW CHAT
+                  </button>
+                </div>
               </div>
               <div className="sessions-list">
                 {sessions.map((s) => (
@@ -799,6 +856,39 @@ function App() {
             <div className="settings-card">
               <h4 className="settings-title">SETTINGS</h4>
               <div className="settings-option">
+                <label className="select-setting-label">Default Model:</label>
+                <select
+                  className="theme-select"
+                  value={defaultProvider}
+                  onChange={(e) => setDefaultProvider(e.target.value)}
+                >
+                  <option value="gemini">Gemini</option>
+                  <option value="ollama">Ollama</option>
+                </select>
+              </div>
+              <div className="settings-option">
+                <label className="checkbox-setting-label">
+                  <input
+                    type="checkbox"
+                    className="setting-checkbox"
+                    checked={autoCopy}
+                    onChange={(e) => setAutoCopy(e.target.checked)}
+                  />
+                  <span>Auto-copy AI responses to clipboard</span>
+                </label>
+              </div>
+              <div className="settings-option">
+                <label className="checkbox-setting-label">
+                  <input
+                    type="checkbox"
+                    className="setting-checkbox"
+                    checked={voiceNarration}
+                    onChange={(e) => setVoiceNarration(e.target.checked)}
+                  />
+                  <span>Read AI responses out loud (Speech)</span>
+                </label>
+              </div>
+              <div className="settings-option">
                 <label className="checkbox-setting-label">
                   <input
                     type="checkbox"
@@ -835,17 +925,8 @@ function App() {
 
         {/* Content Section */}
         <div className="hud-content">
-          {/* Controls Bar (Dropdown Select + Auto-Copy Toggle Switch) */}
+          {/* Controls Bar (Voice Switch + Provider Select) */}
           <div className="controls-bar">
-            <label className="autocopy-container">
-              <input
-                type="checkbox"
-                className="autocopy-checkbox"
-                checked={autoCopy}
-                onChange={(e) => setAutoCopy(e.target.checked)}
-              />
-              <span>Auto-Copy</span>
-            </label>
 
             {/* Voice Activation Switch */}
             <button
