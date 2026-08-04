@@ -1185,7 +1185,8 @@ function App() {
                               disabled={runningCommand !== null}
                               onClick={() => {
                                 const matches = msg.content.match(/```(?:powershell|bash|sh|cmd)?\n?([\s\S]*?)```/);
-                                const cmdToExec = matches && matches[1] ? matches[1].trim() : msg.content.trim();
+                                const rawCmd = matches && matches[1] ? matches[1].trim() : msg.content.trim();
+                                const cmdToExec = rawCmd.split("\n").map(l => l.trim()).filter(l => l.length > 0).join("; ");
                                 handleRunCommand(cmdToExec);
                               }}
                             >
