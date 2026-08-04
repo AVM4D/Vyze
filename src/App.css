@@ -875,6 +875,8 @@ html {
 
 .settings-card {
   width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
   background: var(--bg-card);
   border: var(--border-width) solid var(--border-color);
   box-shadow: 4px 4px 0px var(--shadow-color);
@@ -884,6 +886,36 @@ html {
   flex-direction: column;
   gap: 8px;
   box-sizing: border-box;
+}
+
+.custom-instructions-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.custom-prompt-textarea {
+  width: 100%;
+  height: 52px;
+  min-height: 40px;
+  max-height: 70px;
+  padding: 4px 6px;
+  font-size: 0.72em;
+  font-weight: 600;
+  font-family: inherit;
+  background: var(--bg-input);
+  color: var(--fg-main);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: 3px;
+  box-sizing: border-box;
+  resize: vertical;
+  outline: none;
+}
+
+.custom-prompt-textarea:focus {
+  border-color: var(--primary-color);
 }
 
 .settings-title {

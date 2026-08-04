@@ -68,6 +68,7 @@ function App() {
 
   const [persona, setPersona] = useState<string>(() => localStorage.getItem("vyze_persona") || "balanced");
   const [customPrompt, setCustomPrompt] = useState<string>(() => localStorage.getItem("vyze_custom_prompt") || "");
+  const [customPromptSaved, setCustomPromptSaved] = useState<boolean>(false);
 
   const autoCaptureRef = useRef(autoCapture);
   const handleCaptureScreenRef = useRef<any>(null);
@@ -1002,15 +1003,24 @@ function App() {
               </div>
 
               {persona === "custom" && (
-                <div className="settings-option" style={{ flexDirection: "column", alignItems: "flex-start" }}>
-                  <label className="select-setting-label" style={{ marginBottom: "4px" }}>Custom Instructions:</label>
+                <div className="custom-instructions-group">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label className="select-setting-label">Custom Instructions:</label>
+                    {customPromptSaved && (
+                      <span style={{ fontSize: "0.65em", color: "#22c55e", fontWeight: "bold" }}>✓ Saved</span>
+                    )}
+                  </div>
                   <textarea
                     className="custom-prompt-textarea"
                     value={customPrompt}
-                    onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="Type custom instructions for Vyze here..."
-                    rows={3}
-                    style={{ width: "100%", padding: "4px", fontSize: "0.75em", background: "var(--bg-input)", color: "var(--fg-main)", border: "1.5px solid var(--border-color)", borderRadius: "3px", resize: "vertical" }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      setCustomPrompt(e.target.value);
+                      setCustomPromptSaved(true);
+                      setTimeout(() => setCustomPromptSaved(false), 2000);
+                    }}
+                    placeholder="e.g. Speak like a pirate or always use bullet points..."
+                    rows={2}
                   />
                 </div>
               )}
