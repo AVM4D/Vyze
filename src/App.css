@@ -1330,3 +1330,46 @@ html {
   transform: translate(1px, 1px);
   box-shadow: 0.5px 0.5px 0px var(--border-color);
 }
+
+/* Action Proposal Card */
+.action-proposal-card {
+  margin-top: 6px;
+  padding: 6px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-color);
+  border-radius: 3px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.run-action-btn {
+  background: #22c55e !important;
+  border: 1.5px solid var(--border-color);
+  box-shadow: 1.5px 1.5px 0px var(--border-color);
+  border-radius: 3px;
+  color: #000000;
+  font-weight: 800;
+  font-size: 0.68em;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: transform 0.05s, box-shadow 0.05s;
+  letter-spacing: 0.5px;
+}
+
+.run-action-btn:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2px 2px 0px var(--border-color);
+}
+
+.run-action-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 0.5px 0.5px 0px var(--border-color);
+}
+
+.run-action-btn:disabled {
+  background: #64748b !important;
+  color: #ffffff;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}

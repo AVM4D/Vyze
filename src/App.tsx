@@ -69,6 +69,45 @@ function App() {
   const [persona, setPersona] = useState<string>(() => localStorage.getItem("vyze_persona") || "balanced");
   const [customPrompt, setCustomPrompt] = useState<string>(() => localStorage.getItem("vyze_custom_prompt") || "");
   const [customPromptSaved, setCustomPromptSaved] = useState<boolean>(false);
+  const [runningCommand, setRunningCommand] = useState<string | null>(null);
+
+  interface CommandResult {
+    stdout: string;
+    stderr: string;
+    exit_code: number;
+  }
+
+  async function handleRunCommand(cmdToRun: string) {
+    setRunningCommand(cmdToRun);
+    try {
+      const res = await invoke<CommandResult>("run_terminal_command", { command: cmdToRun, cwd: null });
+      let outputText = `\n\n[Terminal Execution Output for '${cmdToRun}']:\n`;
+      if (res.stdout.trim()) {
+        outputText += `\`\`\`powershell\n${res.stdout.trim()}\n\`\`\`\n`;
+      }
+      if (res.stderr.trim()) {
+        outputText += `\n*Stderr/Errors*:\n\`\`\`powershell\n${res.stderr.trim()}\n\`\`\`\n`;
+      }
+      if (!res.stdout.trim() && !res.stderr.trim()) {
+        outputText += `*(Process finished cleanly with exit code ${res.exit_code})*\n`;
+      }
+
+      setMessages((prev) => [...prev, { role: "assistant", content: outputText, image_base64: null }]);
+
+      if (activeSessionId) {
+        invoke("db_add_message", {
+          sessionId: activeSessionId,
+          role: "assistant",
+          content: outputText,
+          imageBase64: null,
+        }).catch(console.error);
+      }
+    } catch (err: any) {
+      setMessages((prev) => [...prev, { role: "assistant", content: `\n\n[Terminal Execution Failed]: ${err}`, image_base64: null }]);
+    } finally {
+      setRunningCommand(null);
+    }
+  }
 
   const autoCaptureRef = useRef(autoCapture);
   const handleCaptureScreenRef = useRef<any>(null);
@@ -1138,6 +1177,22 @@ function App() {
                     ) : (
                       <>
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        {msg.role === "assistant" && msg.content.includes("```") && (
+                          <div className="action-proposal-card">
+                            <button
+                              type="button"
+                              className="run-action-btn"
+                              disabled={runningCommand !== null}
+                              onClick={() => {
+                                const matches = msg.content.match(/```(?:powershell|bash|sh|cmd)?\n?([\s\S]*?)```/);
+                                const cmdToExec = matches && matches[1] ? matches[1].trim() : msg.content.trim();
+                                handleRunCommand(cmdToExec);
+                              }}
+                            >
+                              {runningCommand ? "EXECUTING COMMAND..." : "▶ RUN TERMINAL COMMAND"}
+                            </button>
+                          </div>
+                        )}
                         {/* Copy button positioned absolutely in the bubble top-right corner */}
                         {msg.role === "assistant" && (
                           <button

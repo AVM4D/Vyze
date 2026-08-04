@@ -5,6 +5,7 @@ mod embeddings;
 mod fetcher;
 mod personas;
 mod stt;
+mod terminal;
 
 use base64::prelude::*;
 use std::io::Cursor;
@@ -337,6 +338,18 @@ async fn stop_voice_recording(state: tauri::State<'_, AppState>) -> Result<Strin
     }
 
     stt::transcribe_audio(&samples).await
+}
+
+// ==========================================
+// TERMINAL EXECUTION IPC COMMAND
+// ==========================================
+
+#[tauri::command]
+async fn run_terminal_command(
+    command: String,
+    cwd: Option<String>,
+) -> Result<terminal::CommandOutput, String> {
+    terminal::execute_command(&command, cwd.as_deref()).await
 }
 
 // A command that reads plain text from the system clipboard
@@ -725,7 +738,8 @@ pub fn run() {
             db_set_setting,
             db_get_setting,
             start_voice_recording,
-            stop_voice_recording
+            stop_voice_recording,
+            run_terminal_command
         ])
         .setup(|app| {
             // Initialize Database Manager
