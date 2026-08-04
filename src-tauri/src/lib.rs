@@ -180,20 +180,40 @@ async fn ask_vyze(
     let custom_prompt = state.db.get_setting("custom_system_prompt").ok().flatten().unwrap_or_default();
     let active_system_prompt = personas::get_system_prompt(&persona_key, &custom_prompt);
 
-    // 1. Choose which AI provider to initialize
+    // 1. Choose which AI provider to initialize with user-configured API keys & model names
     let ai_provider: Box<dyn ai::AiProvider> = match provider.as_str() {
         "gemini" => {
-            // Read the API key from the system environment variables
-            let api_key = std::env::var("GEMINI_API_KEY")
-                .map_err(|_| "GEMINI_API_KEY environment variable is not set. Please set it in your system variables to use Gemini.".to_string())?;
-            Box::new(ai::GeminiProvider::new(api_key, None, Some(active_system_prompt)))
+            let api_key = state.db.get_setting("gemini_api_key").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("GEMINI_API_KEY").ok())
+                .ok_or_else(|| "Gemini API key is not set. Please enter your API key in Settings (⚙) -> Setup.".to_string())?;
+            let model = state.db.get_setting("gemini_model").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("GEMINI_MODEL").ok());
+            Box::new(ai::GeminiProvider::new(api_key, model, Some(active_system_prompt)))
+        }
+        "openai" => {
+            let api_key = state.db.get_setting("openai_api_key").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+                .ok_or_else(|| "OpenAI API key is not set. Please enter your API key in Settings (⚙) -> Setup.".to_string())?;
+            let model = state.db.get_setting("openai_model").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("OPENAI_MODEL").ok());
+            Box::new(ai::OpenAIProvider::new(api_key, model, Some(active_system_prompt)))
+        }
+        "anthropic" => {
+            let api_key = state.db.get_setting("anthropic_api_key").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+                .ok_or_else(|| "Anthropic API key is not set. Please enter your API key in Settings (⚙) -> Setup.".to_string())?;
+            let model = state.db.get_setting("anthropic_model").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("ANTHROPIC_MODEL").ok());
+            Box::new(ai::AnthropicProvider::new(api_key, model, Some(active_system_prompt)))
         }
         "ollama" => {
-            // Read local Ollama model name from environment or default to "llama3"
-            let model = std::env::var("OLLAMA_MODEL").ok();
-            Box::new(ai::OllamaProvider::new(model, Some(active_system_prompt)))
+            let model = state.db.get_setting("ollama_model").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("OLLAMA_MODEL").ok());
+            let base_url = state.db.get_setting("ollama_base_url").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("OLLAMA_BASE_URL").ok());
+            Box::new(ai::OllamaProvider::new(model, base_url, Some(active_system_prompt)))
         }
-        _ => return Err(format!("Unknown provider: {}", provider)),
+        _ => return Err(format!("Unsupported AI provider: {}", provider)),
     };
 
     // 2. Start the streaming request

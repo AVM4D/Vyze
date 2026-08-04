@@ -71,6 +71,19 @@ function App() {
   const [customPromptSaved, setCustomPromptSaved] = useState<boolean>(false);
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
 
+  // API Keys & Custom Model Setup States
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem("vyze_gemini_api_key") || "");
+  const [geminiModel, setGeminiModel] = useState<string>(() => localStorage.getItem("vyze_gemini_model") || "");
+
+  const [openaiApiKey, setOpenaiApiKey] = useState<string>(() => localStorage.getItem("vyze_openai_api_key") || "");
+  const [openaiModel, setOpenaiModel] = useState<string>(() => localStorage.getItem("vyze_openai_model") || "");
+
+  const [anthropicApiKey, setAnthropicApiKey] = useState<string>(() => localStorage.getItem("vyze_anthropic_api_key") || "");
+  const [anthropicModel, setAnthropicModel] = useState<string>(() => localStorage.getItem("vyze_anthropic_model") || "");
+
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState<string>(() => localStorage.getItem("vyze_ollama_base_url") || "http://127.0.0.1:11434");
+  const [ollamaModel, setOllamaModel] = useState<string>(() => localStorage.getItem("vyze_ollama_model") || "qwen2.5vl:7b");
+
   interface CommandResult {
     stdout: string;
     stderr: string;
@@ -204,6 +217,46 @@ function App() {
     localStorage.setItem("vyze_persona", persona);
     invoke("db_set_setting", { key: "persona_key", value: persona }).catch(console.error);
   }, [persona]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_gemini_api_key", geminiApiKey);
+    invoke("db_set_setting", { key: "gemini_api_key", value: geminiApiKey }).catch(console.error);
+  }, [geminiApiKey]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_gemini_model", geminiModel);
+    invoke("db_set_setting", { key: "gemini_model", value: geminiModel }).catch(console.error);
+  }, [geminiModel]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_openai_api_key", openaiApiKey);
+    invoke("db_set_setting", { key: "openai_api_key", value: openaiApiKey }).catch(console.error);
+  }, [openaiApiKey]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_openai_model", openaiModel);
+    invoke("db_set_setting", { key: "openai_model", value: openaiModel }).catch(console.error);
+  }, [openaiModel]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_anthropic_api_key", anthropicApiKey);
+    invoke("db_set_setting", { key: "anthropic_api_key", value: anthropicApiKey }).catch(console.error);
+  }, [anthropicApiKey]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_anthropic_model", anthropicModel);
+    invoke("db_set_setting", { key: "anthropic_model", value: anthropicModel }).catch(console.error);
+  }, [anthropicModel]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_ollama_base_url", ollamaBaseUrl);
+    invoke("db_set_setting", { key: "ollama_base_url", value: ollamaBaseUrl }).catch(console.error);
+  }, [ollamaBaseUrl]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_ollama_model", ollamaModel);
+    invoke("db_set_setting", { key: "ollama_model", value: ollamaModel }).catch(console.error);
+  }, [ollamaModel]);
 
   useEffect(() => {
     localStorage.setItem("vyze_custom_prompt", customPrompt);
@@ -1012,16 +1065,116 @@ function App() {
             <div className="settings-card">
               <h4 className="settings-title">SETTINGS</h4>
               <div className="settings-option">
-                <label className="select-setting-label">Default Model:</label>
+                <label className="select-setting-label">Default Model Provider:</label>
                 <select
                   className="theme-select"
                   value={defaultProvider}
                   onChange={(e) => setDefaultProvider(e.target.value)}
                 >
-                  <option value="gemini">Gemini</option>
-                  <option value="ollama">Ollama</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI (ChatGPT)</option>
+                  <option value="anthropic">Anthropic (Claude)</option>
+                  <option value="ollama">Local Ollama</option>
                 </select>
               </div>
+
+              {/* API & Model Setup Section */}
+              <div className="api-setup-section" style={{ borderTop: "1px dashed var(--border-color)", paddingTop: "8px", marginTop: "4px" }}>
+                <h5 style={{ margin: "0 0 6px 0", fontSize: "0.75em", color: "var(--primary-color)", textTransform: "uppercase" }}>API & Model Setup</h5>
+
+                {/* Gemini Setup */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "6px" }}>
+                  <label className="select-setting-label" style={{ fontSize: "0.65em" }}>Gemini API Key / Model:</label>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    <input
+                      type="password"
+                      placeholder="Paste Gemini API Key..."
+                      value={geminiApiKey}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setGeminiApiKey(e.target.value)}
+                      style={{ flex: 1, fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="e.g. gemini-1.5-flash"
+                      value={geminiModel}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setGeminiModel(e.target.value)}
+                      style={{ width: "95px", fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                  </div>
+                </div>
+
+                {/* OpenAI Setup */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "6px" }}>
+                  <label className="select-setting-label" style={{ fontSize: "0.65em" }}>OpenAI API Key / Model:</label>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    <input
+                      type="password"
+                      placeholder="Paste OpenAI API Key..."
+                      value={openaiApiKey}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setOpenaiApiKey(e.target.value)}
+                      style={{ flex: 1, fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="e.g. gpt-4o"
+                      value={openaiModel}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setOpenaiModel(e.target.value)}
+                      style={{ width: "95px", fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Anthropic Setup */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "6px" }}>
+                  <label className="select-setting-label" style={{ fontSize: "0.65em" }}>Anthropic API Key / Model:</label>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    <input
+                      type="password"
+                      placeholder="Paste Claude API Key..."
+                      value={anthropicApiKey}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setAnthropicApiKey(e.target.value)}
+                      style={{ flex: 1, fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="e.g. claude-3-5-sonnet-20241022"
+                      value={anthropicModel}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setAnthropicModel(e.target.value)}
+                      style={{ width: "95px", fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Ollama Setup */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "6px" }}>
+                  <label className="select-setting-label" style={{ fontSize: "0.65em" }}>Ollama Base URL / Model:</label>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    <input
+                      type="text"
+                      placeholder="http://127.0.0.1:11434"
+                      value={ollamaBaseUrl}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setOllamaBaseUrl(e.target.value)}
+                      style={{ flex: 1, fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="e.g. qwen2.5vl:7b"
+                      value={ollamaModel}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setOllamaModel(e.target.value)}
+                      style={{ width: "95px", fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="settings-option">
                 <label className="checkbox-setting-label">
                   <input
@@ -1170,6 +1323,8 @@ function App() {
                 disabled={isLoading}
               >
                 <option value="gemini">Gemini</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Claude</option>
                 <option value="ollama">Ollama</option>
               </select>
             </div>
