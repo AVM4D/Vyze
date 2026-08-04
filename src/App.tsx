@@ -66,6 +66,9 @@ function App() {
     return saved ? parseInt(saved, 10) : 15000;
   });
 
+  const [persona, setPersona] = useState<string>(() => localStorage.getItem("vyze_persona") || "balanced");
+  const [customPrompt, setCustomPrompt] = useState<string>(() => localStorage.getItem("vyze_custom_prompt") || "");
+
   const autoCaptureRef = useRef(autoCapture);
   const handleCaptureScreenRef = useRef<any>(null);
 
@@ -100,6 +103,16 @@ function App() {
     localStorage.setItem("vyze_max_doc_context_limit", String(maxDocContextLimit));
     invoke("db_set_setting", { key: "max_doc_context_limit", value: String(maxDocContextLimit) }).catch(console.error);
   }, [maxDocContextLimit]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_persona", persona);
+    invoke("db_set_setting", { key: "persona_key", value: persona }).catch(console.error);
+  }, [persona]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_custom_prompt", customPrompt);
+    invoke("db_set_setting", { key: "custom_system_prompt", value: customPrompt }).catch(console.error);
+  }, [customPrompt]);
 
   useEffect(() => {
     localStorage.setItem("vyze_theme", theme);
@@ -972,6 +985,37 @@ function App() {
                 </div>
               )}
               <div className="settings-option">
+                <label className="select-setting-label">Personality:</label>
+                <select
+                  className="theme-select"
+                  value={persona}
+                  onChange={(e) => setPersona(e.target.value)}
+                >
+                  <option value="balanced">Balanced</option>
+                  <option value="tutor">Scholar</option>
+                  <option value="writer">Wordsmith</option>
+                  <option value="coach">Strategist</option>
+                  <option value="witty">Witty</option>
+                  <option value="engineer">Architect</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+
+              {persona === "custom" && (
+                <div className="settings-option" style={{ flexDirection: "column", alignItems: "flex-start" }}>
+                  <label className="select-setting-label" style={{ marginBottom: "4px" }}>Custom Instructions:</label>
+                  <textarea
+                    className="custom-prompt-textarea"
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    placeholder="Type custom instructions for Vyze here..."
+                    rows={3}
+                    style={{ width: "100%", padding: "4px", fontSize: "0.75em", background: "var(--bg-input)", color: "var(--fg-main)", border: "1.5px solid var(--border-color)", borderRadius: "3px", resize: "vertical" }}
+                  />
+                </div>
+              )}
+
+              <div className="settings-option">
                 <label className="select-setting-label">Theme:</label>
                 <select
                   className="theme-select"
@@ -1194,15 +1238,21 @@ function App() {
               >
                 Stop
               </button>
+            ) : isLoading ? (
+              <button
+                type="button"
+                className="stop-generation-btn"
+                onClick={() => {
+                  setIsLoading(false);
+                  if (window.speechSynthesis) window.speechSynthesis.cancel();
+                }}
+                title="Stop AI response generation"
+              >
+                ■ STOP
+              </button>
             ) : (
-              <button type="submit" className="send-button" disabled={isLoading}>
-                {isLoading ? (
-                  <div className="dot-flashing">
-                    <div style={{ width: "4px", height: "4px" }}></div>
-                    <div style={{ width: "4px", height: "4px" }}></div>
-                    <div style={{ width: "4px", height: "4px" }}></div>
-                  </div>
-                ) : "Send"}
+              <button type="submit" className="send-button">
+                Send
               </button>
             )}
           </form>

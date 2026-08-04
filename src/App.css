@@ -1273,3 +1273,28 @@ html {
   cursor: pointer;
   padding: 1px 4px;
 }
+
+/* Stop AI Generation Button */
+.stop-generation-btn {
+  background: #ef4444 !important;
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
+  border-radius: 3px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.72em;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: transform 0.05s, box-shadow 0.05s;
+  text-transform: uppercase;
+}
+
+.stop-generation-btn:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2.5px 2.5px 0px var(--border-color);
+}
+
+.stop-generation-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 0.5px 0.5px 0px var(--border-color);
+}

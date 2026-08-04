@@ -26,15 +26,15 @@ pub trait AiProvider: Send + Sync {
 pub struct GeminiProvider {
     api_key: String,
     model: String,
+    system_prompt: Option<String>,
 }
 
 impl GeminiProvider {
-    // We create a new client, letting the user pass an optional model.
-    // If they pass None, we default to "gemini-3.5-flash".
-    pub fn new(api_key: String, model: Option<String>) -> Self {
+    pub fn new(api_key: String, model: Option<String>, system_prompt: Option<String>) -> Self {
         Self {
             api_key,
             model: model.unwrap_or_else(|| "gemini-3.5-flash".to_string()),
+            system_prompt,
         }
     }
 }
@@ -43,6 +43,7 @@ impl AiProvider for GeminiProvider {
     fn stream_chat(&self, history: &[ChatMessage]) -> BoxStream<Result<String, String>> {
         let api_key = self.api_key.clone();
         let model = self.model.clone();
+        let system_prompt = self.system_prompt.clone();
         let history = history.to_vec(); // Clone history to move into the async thread
         let (tx, rx) = mpsc::channel(100);
 
@@ -86,9 +87,17 @@ impl AiProvider for GeminiProvider {
                 })
                 .collect();
 
-            let body = serde_json::json!({
+            let mut body_map = serde_json::json!({
                 "contents": contents
             });
+            if let Some(ref sys) = system_prompt {
+                if !sys.trim().is_empty() {
+                    body_map["system_instruction"] = serde_json::json!({
+                        "parts": [{ "text": sys }]
+                    });
+                }
+            }
+            let body = body_map;
 
             let res = match client.post(&url).json(&body).send().await {
                 Ok(response) => response,
@@ -165,12 +174,14 @@ impl AiProvider for GeminiProvider {
 // ==========================================
 pub struct OllamaProvider {
     model: String,
+    system_prompt: Option<String>,
 }
 
 impl OllamaProvider {
-    pub fn new(model: Option<String>) -> Self {
+    pub fn new(model: Option<String>, system_prompt: Option<String>) -> Self {
         Self {
             model: model.unwrap_or_else(|| "llama3".to_string()),
+            system_prompt,
         }
     }
 }
@@ -178,6 +189,7 @@ impl OllamaProvider {
 impl AiProvider for OllamaProvider {
     fn stream_chat(&self, history: &[ChatMessage]) -> BoxStream<Result<String, String>> {
         let model = self.model.clone();
+        let system_prompt = self.system_prompt.clone();
         let history = history.to_vec(); // Clone history to move into the async thread
         let (tx, rx) = mpsc::channel(100);
 
@@ -186,30 +198,39 @@ impl AiProvider for OllamaProvider {
             let url = "http://127.0.0.1:11434/api/chat";
 
             // Convert our standard ChatMessages into Ollama API format
-            let messages: Vec<serde_json::Value> = history
-                .iter()
-                .map(|msg| {
-                    if let Some(ref img) = msg.image_base64 {
-                        if !img.is_empty() {
-                            serde_json::json!({
-                                "role": msg.role,
-                                "content": msg.content,
-                                "images": [img]
-                            })
-                        } else {
-                            serde_json::json!({
-                                "role": msg.role,
-                                "content": msg.content
-                            })
-                        }
+            let mut messages: Vec<serde_json::Value> = Vec::new();
+
+            // Prepend system prompt message at index 0 for Ollama /api/chat
+            if let Some(ref sys) = system_prompt {
+                if !sys.trim().is_empty() {
+                    messages.push(serde_json::json!({
+                        "role": "system",
+                        "content": sys
+                    }));
+                }
+            }
+
+            for msg in history.iter() {
+                if let Some(ref img) = msg.image_base64 {
+                    if !img.is_empty() {
+                        messages.push(serde_json::json!({
+                            "role": msg.role,
+                            "content": msg.content,
+                            "images": [img]
+                        }));
                     } else {
-                        serde_json::json!({
+                        messages.push(serde_json::json!({
                             "role": msg.role,
                             "content": msg.content
-                        })
+                        }));
                     }
-                })
-                .collect();
+                } else {
+                    messages.push(serde_json::json!({
+                        "role": msg.role,
+                        "content": msg.content
+                    }));
+                }
+            }
 
             // Construct native Ollama JSON payload with options (16384 context size)
             let body = serde_json::json!({
@@ -262,12 +283,15 @@ impl AiProvider for OllamaProvider {
                                 buffer.drain(..=newline_idx);
 
                                 if !line.is_empty() {
-                                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
+                                    if let Ok(val) =
+                                        serde_json::from_str::<serde_json::Value>(&line)
+                                    {
                                         let done = val["done"].as_bool().unwrap_or(false);
 
                                         if let Some(text_val) = val["message"]["content"].as_str() {
                                             if !text_val.is_empty() {
-                                                if tx.send(Ok(text_val.to_string())).await.is_err() {
+                                                if tx.send(Ok(text_val.to_string())).await.is_err()
+                                                {
                                                     break;
                                                 }
                                             }

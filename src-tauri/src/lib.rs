@@ -3,6 +3,7 @@ mod audio;
 mod db;
 mod embeddings;
 mod fetcher;
+mod personas;
 mod stt;
 
 use base64::prelude::*;
@@ -24,7 +25,7 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState}; // Import StreamExt so we can call .next() on our stream
                                                                                                  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-// AppState stores configuration settings like auto_capture in a Mutex for safe access
+                                                                                                 // AppState stores configuration settings like auto_capture in a Mutex for safe access
 pub struct AppState {
     pub auto_capture: std::sync::Mutex<bool>,
     pub db: db::DbManager,
@@ -60,7 +61,15 @@ async fn ask_vyze(
     if let Some(last_msg) = history.last() {
         let prompt_lower = last_msg.content.to_lowercase();
         let triggers = [
-            "remember", "recall", "search", "history", "past", "chat", "prev", "yesterday", "look up",
+            "remember",
+            "recall",
+            "search",
+            "history",
+            "past",
+            "chat",
+            "prev",
+            "yesterday",
+            "look up",
         ];
         let is_memory_query = triggers.iter().any(|t| prompt_lower.contains(t));
 
@@ -69,15 +78,23 @@ async fn ask_vyze(
                 let mut search_results = Vec::new();
 
                 // 1. Attempt Vector Embedding Semantic Search
-                if let Ok(query_vec) = embeddings::generate_embedding(&last_msg.content, &provider).await {
-                    if let Ok(vec_results) = state.db.semantic_search_past_context(current_sid, &query_vec, 5, 0.45) {
+                if let Ok(query_vec) =
+                    embeddings::generate_embedding(&last_msg.content, &provider).await
+                {
+                    if let Ok(vec_results) =
+                        state
+                            .db
+                            .semantic_search_past_context(current_sid, &query_vec, 5, 0.45)
+                    {
                         search_results = vec_results;
                     }
                 }
 
                 // 2. Fallback to recent chat history if vector embeddings empty
                 if search_results.is_empty() {
-                    if let Ok(fts_results) = state.db.search_past_context(current_sid, &last_msg.content) {
+                    if let Ok(fts_results) =
+                        state.db.search_past_context(current_sid, &last_msg.content)
+                    {
                         search_results = fts_results;
                     }
                 }
@@ -99,9 +116,20 @@ async fn ask_vyze(
     }
 
     // Read user settings for context truncation limit
-    let enable_limit = state.db.get_setting("enable_context_limit").ok().flatten().map(|v| v == "true").unwrap_or(false);
+    let enable_limit = state
+        .db
+        .get_setting("enable_context_limit")
+        .ok()
+        .flatten()
+        .map(|v| v == "true")
+        .unwrap_or(false);
     let max_limit = if enable_limit {
-        state.db.get_setting("max_doc_context_limit").ok().flatten().and_then(|s| s.parse::<usize>().ok())
+        state
+            .db
+            .get_setting("max_doc_context_limit")
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<usize>().ok())
     } else {
         None
     };
@@ -112,8 +140,10 @@ async fn ask_vyze(
         let words: Vec<&str> = content.split_whitespace().collect();
 
         for word in words {
-            let clean_word = word.trim_matches(|c| c == '(' || c == ')' || c == '[' || c == ']' || c == '\'' || c == '"');
-            
+            let clean_word = word.trim_matches(|c| {
+                c == '(' || c == ')' || c == '[' || c == ']' || c == '\'' || c == '"'
+            });
+
             // Check for HTTP / HTTPS Web URLs
             if clean_word.starts_with("http://") || clean_word.starts_with("https://") {
                 if let Ok(web_markdown) = fetcher::fetch_url_markdown(clean_word, max_limit).await {
@@ -124,7 +154,16 @@ async fn ask_vyze(
                 }
             }
             // Check for Local File Paths
-            else if clean_word.contains('/') || clean_word.contains('\\') || clean_word.ends_with(".rs") || clean_word.ends_with(".tsx") || clean_word.ends_with(".ts") || clean_word.ends_with(".json") || clean_word.ends_with(".toml") || clean_word.ends_with(".md") || clean_word.ends_with(".py") {
+            else if clean_word.contains('/')
+                || clean_word.contains('\\')
+                || clean_word.ends_with(".rs")
+                || clean_word.ends_with(".tsx")
+                || clean_word.ends_with(".ts")
+                || clean_word.ends_with(".json")
+                || clean_word.ends_with(".toml")
+                || clean_word.ends_with(".md")
+                || clean_word.ends_with(".py")
+            {
                 if let Ok(file_content) = fetcher::read_file_content(clean_word, max_limit).await {
                     last_msg_mut.content.push_str(&format!(
                         "\n\n[Attached File Content from '{}']:\n{}\n",
@@ -135,18 +174,23 @@ async fn ask_vyze(
         }
     }
 
+    // Read active persona and custom prompt settings from SQLite
+    let persona_key = state.db.get_setting("persona_key").ok().flatten().unwrap_or_else(|| "balanced".to_string());
+    let custom_prompt = state.db.get_setting("custom_system_prompt").ok().flatten().unwrap_or_default();
+    let active_system_prompt = personas::get_system_prompt(&persona_key, &custom_prompt);
+
     // 1. Choose which AI provider to initialize
     let ai_provider: Box<dyn ai::AiProvider> = match provider.as_str() {
         "gemini" => {
             // Read the API key from the system environment variables
             let api_key = std::env::var("GEMINI_API_KEY")
                 .map_err(|_| "GEMINI_API_KEY environment variable is not set. Please set it in your system variables to use Gemini.".to_string())?;
-            Box::new(ai::GeminiProvider::new(api_key, None))
+            Box::new(ai::GeminiProvider::new(api_key, None, Some(active_system_prompt)))
         }
         "ollama" => {
             // Read local Ollama model name from environment or default to "llama3"
             let model = std::env::var("OLLAMA_MODEL").ok();
-            Box::new(ai::OllamaProvider::new(model))
+            Box::new(ai::OllamaProvider::new(model, Some(active_system_prompt)))
         }
         _ => return Err(format!("Unknown provider: {}", provider)),
     };
@@ -194,7 +238,10 @@ fn db_update_session_title(
     id: String,
     title: String,
 ) -> Result<(), String> {
-    state.db.update_session_title(&id, &title).map_err(|e| e.to_string())
+    state
+        .db
+        .update_session_title(&id, &title)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -207,7 +254,10 @@ fn db_get_messages(
     state: tauri::State<'_, AppState>,
     session_id: String,
 ) -> Result<Vec<db::DbMessage>, String> {
-    state.db.get_messages(&session_id).map_err(|e| e.to_string())
+    state
+        .db
+        .get_messages(&session_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -231,7 +281,8 @@ async fn db_add_message(
 
     if !content_clone.trim().is_empty() {
         tauri::async_runtime::spawn(async move {
-            if let Ok(vector) = embeddings::generate_embedding(&content_clone, &provider_name).await {
+            if let Ok(vector) = embeddings::generate_embedding(&content_clone, &provider_name).await
+            {
                 let db = db::DbManager::from_db_path(db_path);
                 let _ = db.add_message_embedding(msg_id, &session_id_clone, &vector);
             }
@@ -247,7 +298,10 @@ fn db_set_setting(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    state.db.set_setting(&key, &value).map_err(|e| e.to_string())
+    state
+        .db
+        .set_setting(&key, &value)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -373,20 +427,30 @@ async fn perform_screen_capture() -> Result<String, String> {
         };
 
         // 2. Query all active monitors
-        let monitors = xcap::Monitor::all().map_err(|e| format!("Failed to query monitors: {}", e))?;
+        let monitors =
+            xcap::Monitor::all().map_err(|e| format!("Failed to query monitors: {}", e))?;
 
         // 3. Find monitor containing mouse cursor coordinate
         let mut active_monitor = None;
         for m in monitors {
-            let start_x = m.x().map_err(|e| format!("Failed to read monitor X: {}", e))?;
-            let width = m.width().map_err(|e| format!("Failed to read monitor width: {}", e))?;
-            let start_y = m.y().map_err(|e| format!("Failed to read monitor Y: {}", e))?;
-            let height = m.height().map_err(|e| format!("Failed to read monitor height: {}", e))?;
+            let start_x = m
+                .x()
+                .map_err(|e| format!("Failed to read monitor X: {}", e))?;
+            let width = m
+                .width()
+                .map_err(|e| format!("Failed to read monitor width: {}", e))?;
+            let start_y = m
+                .y()
+                .map_err(|e| format!("Failed to read monitor Y: {}", e))?;
+            let height = m
+                .height()
+                .map_err(|e| format!("Failed to read monitor height: {}", e))?;
 
             let end_x = start_x + width as i32;
             let end_y = start_y + height as i32;
 
-            if cursor_x >= start_x && cursor_x <= end_x && cursor_y >= start_y && cursor_y <= end_y {
+            if cursor_x >= start_x && cursor_x <= end_x && cursor_y >= start_y && cursor_y <= end_y
+            {
                 active_monitor = Some(m);
                 break;
             }
@@ -405,20 +469,19 @@ async fn perform_screen_capture() -> Result<String, String> {
         };
 
         // 4. Capture surface
-        let image = monitor.capture_image().map_err(|e| format!("Direct surface capture failed: {}", e))?;
+        let image = monitor
+            .capture_image()
+            .map_err(|e| format!("Direct surface capture failed: {}", e))?;
 
         // Resize the image to fit within 1024x1024 while maintaining aspect ratio.
         let dynamic_image = image::DynamicImage::ImageRgba8(image);
-        let resized_image = dynamic_image.resize(
-            1024,
-            1024,
-            image::imageops::FilterType::Triangle,
-        );
+        let resized_image = dynamic_image.resize(1024, 1024, image::imageops::FilterType::Triangle);
 
         // 5. Compress RGBA buffer directly to PNG bytes
         let mut png_bytes = Vec::new();
         let mut write_cursor = Cursor::new(&mut png_bytes);
-        resized_image.write_to(&mut write_cursor, image::ImageFormat::Png)
+        resized_image
+            .write_to(&mut write_cursor, image::ImageFormat::Png)
             .map_err(|e| format!("PNG encoding failure: {}", e))?;
 
         // 6. Base64 serialize PNG binary to ASCII text
@@ -478,8 +541,10 @@ fn toggle_window(app: &tauri::AppHandle) {
                 for m in monitors {
                     let pos = m.position();
                     let size = m.size();
-                    if cursor_x >= pos.x && cursor_x <= pos.x + size.width as i32
-                        && cursor_y >= pos.y && cursor_y <= pos.y + size.height as i32
+                    if cursor_x >= pos.x
+                        && cursor_x <= pos.x + size.width as i32
+                        && cursor_y >= pos.y
+                        && cursor_y <= pos.y + size.height as i32
                     {
                         monitor_x = pos.x;
                         monitor_y = pos.y;
@@ -575,8 +640,10 @@ fn show_main_window(app: tauri::AppHandle) {
             for m in monitors {
                 let pos = m.position();
                 let size = m.size();
-                if cursor_x >= pos.x && cursor_x <= pos.x + size.width as i32
-                    && cursor_y >= pos.y && cursor_y <= pos.y + size.height as i32
+                if cursor_x >= pos.x
+                    && cursor_x <= pos.x + size.width as i32
+                    && cursor_y >= pos.y
+                    && cursor_y <= pos.y + size.height as i32
                 {
                     monitor_x = pos.x;
                     monitor_y = pos.y;
