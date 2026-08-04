@@ -3,10 +3,11 @@ use std::path::Path;
 use std::time::Duration;
 
 /// Fetches a web URL and converts its readable HTML content into clean Markdown.
-/// If `max_chars` is `None`, the full document is returned without truncation.
-pub async fn fetch_url_markdown(url: &str, max_chars: Option<usize>) -> Result<String, String> {
+/// If `max_limit` is `Some(limit)` and `limit > 0`, content is capped at `limit` characters.
+/// If `max_limit` is `None` or `Some(0)`, the full document is returned untruncated.
+pub async fn fetch_url_markdown(url: &str, max_limit: Option<usize>) -> Result<String, String> {
     let client = Client::builder()
-        .timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(12))
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
@@ -27,11 +28,11 @@ pub async fn fetch_url_markdown(url: &str, max_chars: Option<usize>) -> Result<S
         .map_err(|e| format!("Failed to read HTML body: {}", e))?;
 
     let markdown = html_to_markdown(&html);
-
-    if let Some(limit) = max_chars {
-        if markdown.len() > limit {
+    
+    if let Some(limit) = max_limit {
+        if limit > 0 && markdown.len() > limit {
             return Ok(format!(
-                "{}...\n\n[Content truncated at {} characters]",
+                "{}...\n\n[Content truncated at {} characters. You can change or disable this limit in Settings]",
                 &markdown[..limit],
                 limit
             ));
@@ -64,22 +65,22 @@ fn html_to_markdown(html: &str) -> String {
 
     // 2. Convert common HTML tags to Markdown equivalents
     text = text.replace("<h1>", "\n# ")
-        .replace("</h1>", "\n")
-        .replace("<h2>", "\n## ")
-        .replace("</h2>", "\n")
-        .replace("<h3>", "\n### ")
-        .replace("</h3>", "\n")
-        .replace("<p>", "\n")
-        .replace("</p>", "\n")
-        .replace("<br>", "\n")
-        .replace("<br/>", "\n")
-        .replace("<br />", "\n")
-        .replace("<code>", "`")
-        .replace("</code>", "`")
-        .replace("<pre>", "\n```\n")
-        .replace("</pre>", "\n```\n")
-        .replace("<li>", "\n- ")
-        .replace("</li>", "");
+               .replace("</h1>", "\n")
+               .replace("<h2>", "\n## ")
+               .replace("</h2>", "\n")
+               .replace("<h3>", "\n### ")
+               .replace("</h3>", "\n")
+               .replace("<p>", "\n")
+               .replace("</p>", "\n")
+               .replace("<br>", "\n")
+               .replace("<br/>", "\n")
+               .replace("<br />", "\n")
+               .replace("<code>", "`")
+               .replace("</code>", "`")
+               .replace("<pre>", "\n```\n")
+               .replace("</pre>", "\n```\n")
+               .replace("<li>", "\n- ")
+               .replace("</li>", "");
 
     // 3. Strip all remaining HTML tags
     let mut in_tag = false;
@@ -105,8 +106,9 @@ fn html_to_markdown(html: &str) -> String {
 }
 
 /// Reads a local text file from disk safely.
-/// If `max_chars` is `None`, the full file content is returned without truncation.
-pub async fn read_file_content(path_str: &str, max_chars: Option<usize>) -> Result<String, String> {
+/// If `max_limit` is `Some(limit)` and `limit > 0`, content is capped at `limit` characters.
+/// If `max_limit` is `None` or `Some(0)`, the full file is returned untruncated.
+pub async fn read_file_content(path_str: &str, max_limit: Option<usize>) -> Result<String, String> {
     let clean_path = path_str.trim().trim_matches('"').trim_matches('\'');
     let path = Path::new(clean_path);
 
@@ -122,10 +124,10 @@ pub async fn read_file_content(path_str: &str, max_chars: Option<usize>) -> Resu
         .await
         .map_err(|e| format!("Failed to read file '{}': {}", clean_path, e))?;
 
-    if let Some(limit) = max_chars {
-        if content.len() > limit {
+    if let Some(limit) = max_limit {
+        if limit > 0 && content.len() > limit {
             return Ok(format!(
-                "```\n{}...\n[File truncated at {} characters]\n```",
+                "```\n{}...\n[File truncated at {} characters. You can change or disable this limit in Settings]\n```",
                 &content[..limit],
                 limit
             ));

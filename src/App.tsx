@@ -55,18 +55,16 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingTitleText, setEditingTitleText] = useState("");
-  const [truncateContext, setTruncateContext] = useState(false);
+  const [autoCapture, setAutoCapture] = useState(() => localStorage.getItem("vyze_auto_capture") === "true");
+  const [theme, setTheme] = useState(() => localStorage.getItem("vyze_theme") || "retro-pink");
 
-  useEffect(() => {
-    invoke<string | null>("db_get_setting", { key: "truncate_resource_context" })
-      .then((val) => setTruncateContext(val === "true"))
-      .catch(console.error);
-  }, []);
-
-  function handleToggleTruncate(checked: boolean) {
-    setTruncateContext(checked);
-    invoke("db_set_setting", { key: "truncate_resource_context", value: String(checked) }).catch(console.error);
-  }
+  const [enableContextLimit, setEnableContextLimit] = useState<boolean>(() => {
+    return localStorage.getItem("vyze_enable_context_limit") === "true";
+  });
+  const [maxDocContextLimit, setMaxDocContextLimit] = useState<number>(() => {
+    const saved = localStorage.getItem("vyze_max_doc_context_limit");
+    return saved ? parseInt(saved, 10) : 15000;
+  });
 
   const autoCaptureRef = useRef(autoCapture);
   const handleCaptureScreenRef = useRef<any>(null);
@@ -92,6 +90,16 @@ function App() {
   useEffect(() => {
     localStorage.setItem("vyze_voice_narration", String(voiceNarration));
   }, [voiceNarration]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_enable_context_limit", String(enableContextLimit));
+    invoke("db_set_setting", { key: "enable_context_limit", value: String(enableContextLimit) }).catch(console.error);
+  }, [enableContextLimit]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_max_doc_context_limit", String(maxDocContextLimit));
+    invoke("db_set_setting", { key: "max_doc_context_limit", value: String(maxDocContextLimit) }).catch(console.error);
+  }, [maxDocContextLimit]);
 
   useEffect(() => {
     localStorage.setItem("vyze_theme", theme);
@@ -943,12 +951,26 @@ function App() {
                   <input
                     type="checkbox"
                     className="setting-checkbox"
-                    checked={truncateContext}
-                    onChange={(e) => handleToggleTruncate(e.target.checked)}
+                    checked={enableContextLimit}
+                    onChange={(e) => setEnableContextLimit(e.target.checked)}
                   />
-                  <span>Limit File & Web Context (Cap at 15k chars)</span>
+                  <span>Limit web & file context size</span>
                 </label>
               </div>
+              {enableContextLimit && (
+                <div className="settings-option" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <label className="select-setting-label">Max Chars:</label>
+                  <input
+                    type="number"
+                    className="context-limit-input"
+                    value={maxDocContextLimit}
+                    onChange={(e) => setMaxDocContextLimit(Math.max(1000, parseInt(e.target.value || "0", 10)))}
+                    step="1000"
+                    min="1000"
+                    style={{ width: "90px", padding: "2px 4px", fontSize: "0.8em", background: "var(--bg-input)", color: "var(--fg-main)", border: "1.5px solid var(--border-color)", borderRadius: "3px" }}
+                  />
+                </div>
+              )}
               <div className="settings-option">
                 <label className="select-setting-label">Theme:</label>
                 <select
