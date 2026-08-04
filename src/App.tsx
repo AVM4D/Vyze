@@ -109,6 +109,43 @@ function App() {
     }
   }
 
+  function getRunnableTerminalCommand(content: string): string | null {
+    if (!content || !content.includes("```")) return null;
+
+    const blockCount = (content.match(/```/g) || []).length / 2;
+    if (blockCount > 2) return null;
+
+    const match = content.match(/```(?:powershell|bash|sh|cmd|terminal|exec)?\n?([\s\S]*?)```/i);
+    if (!match || !match[1]) return null;
+
+    const rawCmd = match[1].trim();
+    if (!rawCmd) return null;
+
+    if (/<[a-zA-Z0-9_\-\s]+>|\[[a-zA-Z0-9_\-\s]+\]/.test(rawCmd)) {
+      return null;
+    }
+
+    if (
+      content.includes("```html") ||
+      content.includes("```tsx") ||
+      content.includes("```jsx") ||
+      content.includes("```css") ||
+      content.includes("```json") ||
+      content.includes("```python") ||
+      content.includes("```rust")
+    ) {
+      return null;
+    }
+
+    const cleanCmd = rawCmd
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#") && !line.startsWith("//"))
+      .join("; ");
+
+    return cleanCmd || null;
+  }
+
   const autoCaptureRef = useRef(autoCapture);
   const handleCaptureScreenRef = useRef<any>(null);
 
@@ -1177,23 +1214,22 @@ function App() {
                     ) : (
                       <>
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
-                        {msg.role === "assistant" && msg.content.includes("```") && (
-                          <div className="action-proposal-card">
-                            <button
-                              type="button"
-                              className="run-action-btn"
-                              disabled={runningCommand !== null}
-                              onClick={() => {
-                                const matches = msg.content.match(/```(?:powershell|bash|sh|cmd)?\n?([\s\S]*?)```/);
-                                const rawCmd = matches && matches[1] ? matches[1].trim() : msg.content.trim();
-                                const cmdToExec = rawCmd.split("\n").map(l => l.trim()).filter(l => l.length > 0).join("; ");
-                                handleRunCommand(cmdToExec);
-                              }}
-                            >
-                              {runningCommand ? "EXECUTING COMMAND..." : "▶ RUN TERMINAL COMMAND"}
-                            </button>
-                          </div>
-                        )}
+                        {msg.role === "assistant" && (() => {
+                          const runnableCmd = getRunnableTerminalCommand(msg.content);
+                          if (!runnableCmd) return null;
+                          return (
+                            <div className="action-proposal-card">
+                              <button
+                                type="button"
+                                className="run-action-btn"
+                                disabled={runningCommand !== null}
+                                onClick={() => handleRunCommand(runnableCmd)}
+                              >
+                                {runningCommand ? "EXECUTING COMMAND..." : `▶ RUN COMMAND: ${runnableCmd.length > 30 ? runnableCmd.substring(0, 30) + '...' : runnableCmd}`}
+                              </button>
+                            </div>
+                          );
+                        })()}
                         {/* Copy button positioned absolutely in the bubble top-right corner */}
                         {msg.role === "assistant" && (
                           <button
