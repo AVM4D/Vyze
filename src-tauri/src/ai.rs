@@ -33,7 +33,7 @@ impl GeminiProvider {
     pub fn new(api_key: String, model: Option<String>, system_prompt: Option<String>) -> Self {
         Self {
             api_key,
-            model: model.unwrap_or_else(|| "gemini-3.5-flash".to_string()),
+            model: model.unwrap_or_else(|| "gemini-1.5-flash".to_string()),
             system_prompt,
         }
     }
@@ -54,42 +54,54 @@ impl AiProvider for GeminiProvider {
                 model, api_key
             );
 
-            let contents: Vec<serde_json::Value> = history
-                .iter()
-                .map(|msg| {
-                    let role = if msg.role == "assistant" {
-                        "model"
-                    } else {
-                        "user"
-                    };
+            let mut contents: Vec<serde_json::Value> = Vec::new();
 
-                    // Start with just the text part
-                    let mut parts = vec![serde_json::json!({
-                        "text": msg.content
-                    })];
+            // Dual-layer enforcement: Prepend system instruction directly to contents array
+            if let Some(ref sys) = system_prompt {
+                if !sys.trim().is_empty() {
+                    contents.push(serde_json::json!({
+                        "role": "user",
+                        "parts": [{ "text": format!("[SYSTEM INSTRUCTION]: {}\nFollow these operational rules strictly for all subsequent messages.", sys) }]
+                    }));
+                    contents.push(serde_json::json!({
+                        "role": "model",
+                        "parts": [{ "text": "Understood. I will strictly follow these system instructions." }]
+                    }));
+                }
+            }
 
-                    // If a picture is attached, add it to the parts list!
-                    if let Some(ref img) = msg.image_base64 {
-                        if !img.is_empty() {
-                            parts.push(serde_json::json!({
-                                "inlineData": {
-                                    "mimeType": "image/png",
-                                    "data": img
-                                }
-                            }));
-                        }
+            for msg in history.iter() {
+                let role = if msg.role == "assistant" {
+                    "model"
+                } else {
+                    "user"
+                };
+
+                let mut parts = vec![serde_json::json!({
+                    "text": msg.content
+                })];
+
+                if let Some(ref img) = msg.image_base64 {
+                    if !img.is_empty() {
+                        parts.push(serde_json::json!({
+                            "inlineData": {
+                                "mimeType": "image/png",
+                                "data": img
+                            }
+                        }));
                     }
+                }
 
-                    serde_json::json!({
-                        "role": role,
-                        "parts": parts
-                    })
-                })
-                .collect();
+                contents.push(serde_json::json!({
+                    "role": role,
+                    "parts": parts
+                }));
+            }
 
             let mut body_map = serde_json::json!({
                 "contents": contents
             });
+
             if let Some(ref sys) = system_prompt {
                 if !sys.trim().is_empty() {
                     body_map["system_instruction"] = serde_json::json!({

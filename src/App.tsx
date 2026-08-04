@@ -112,19 +112,12 @@ function App() {
   function getRunnableTerminalCommand(content: string): string | null {
     if (!content || !content.includes("```")) return null;
 
-    const blockCount = (content.match(/```/g) || []).length / 2;
-    if (blockCount > 2) return null;
-
-    const match = content.match(/```(?:powershell|bash|sh|cmd|terminal|exec)?\n?([\s\S]*?)```/i);
-    if (!match || !match[1]) return null;
-
-    const rawCmd = match[1].trim();
-    if (!rawCmd) return null;
-
-    if (/<[a-zA-Z0-9_\-\s]+>|\[[a-zA-Z0-9_\-\s]+\]/.test(rawCmd)) {
+    // Suppress commands containing placeholders like <filename>, <branch-name>
+    if (/<[a-zA-Z0-9_\-\s]+>|\[[a-zA-Z0-9_\-\s]+\]/.test(content)) {
       return null;
     }
 
+    // Suppress non-shell programming code snippets
     if (
       content.includes("```html") ||
       content.includes("```tsx") ||
@@ -137,11 +130,37 @@ function App() {
       return null;
     }
 
-    const cleanCmd = rawCmd
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0 && !line.startsWith("#") && !line.startsWith("//"))
-      .join("; ");
+    const regex = /```(?:powershell|bash|sh|cmd|terminal|exec)?\n?([\s\S]*?)```/gi;
+    let match;
+    const extractedLines: string[] = [];
+
+    while ((match = regex.exec(content)) !== null) {
+      if (match[1]) {
+        const lines = match[1].split("\n");
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (
+            trimmed &&
+            !trimmed.startsWith("#") &&
+            !trimmed.startsWith("//") &&
+            !trimmed.toLowerCase().startsWith("step ") &&
+            !trimmed.toLowerCase().startsWith("option ")
+          ) {
+            extractedLines.push(trimmed);
+          }
+        }
+      }
+    }
+
+    if (extractedLines.length === 0) return null;
+
+    // Suppress educational command lists containing > 4 lines/commands
+    if (extractedLines.length > 4) return null;
+
+    let cleanCmd = extractedLines.join("; ");
+    // Convert 'cd D:\Path' to PowerShell 'Set-Location -Path "D:\Path"' for reliable drive switching
+    cleanCmd = cleanCmd.replace(/^cd\s+([A-Za-z]:\\[^\s;]+)/i, 'Set-Location -Path "$1"');
+    cleanCmd = cleanCmd.replace(/;\s*cd\s+([A-Za-z]:\\[^\s;]+)/gi, '; Set-Location -Path "$1"');
 
     return cleanCmd || null;
   }
