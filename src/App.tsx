@@ -1407,7 +1407,7 @@ function App() {
               </div>
               {voiceNarration && availableVoices.length > 0 && (
                 <div className="settings-option">
-                  <label className="select-setting-label">Voice Speaker / Accent:</label>
+                  <label className="select-setting-label">Voice Speaker:</label>
                   <select
                     className="theme-select"
                     value={selectedVoiceName}
