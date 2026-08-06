@@ -35,13 +35,16 @@
   --card-shadow: 6px 6px 0px var(--shadow-color);
   --header-rotation: -1deg;
   --card-bg-pattern: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-                     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
 }
 
 .hud-container.theme-cyberpunk {
-  --primary-color: #00f0ff;      /* Cyan */
-  --secondary-color: #ffe600;    /* Yellow */
-  --bg-card: #121214;            /* Dark Charcoal */
+  --primary-color: #00f0ff;
+  /* Cyan */
+  --secondary-color: #ffe600;
+  /* Yellow */
+  --bg-card: #121214;
+  /* Dark Charcoal */
   --bg-input: #08080a;
   --border-color: #08080a;
   --text-color: #ffffff;
@@ -49,7 +52,8 @@
   --user-bubble-fg: #08080a;
   --assistant-bubble-bg: #ffe600;
   --assistant-bubble-fg: #08080a;
-  --shadow-color: #bc13fe;       /* Neon Purple shadow */
+  --shadow-color: #bc13fe;
+  /* Neon Purple shadow */
   --input-text-color: #00f0ff;
   --brand-color: #08080a;
   --scroll-thumb: #00f0ff;
@@ -63,9 +67,12 @@
 }
 
 .hud-container.theme-dracula {
-  --primary-color: #bd93f9;      /* Purple */
-  --secondary-color: #50fa7b;    /* Green */
-  --bg-card: #282a36;            /* Dracula Dark */
+  --primary-color: #bd93f9;
+  /* Purple */
+  --secondary-color: #50fa7b;
+  /* Green */
+  --bg-card: #282a36;
+  /* Dracula Dark */
   --bg-input: #1e1f29;
   --border-color: #1e1f29;
   --text-color: #f8f8f2;
@@ -73,7 +80,8 @@
   --user-bubble-fg: #282a36;
   --assistant-bubble-bg: #50fa7b;
   --assistant-bubble-fg: #282a36;
-  --shadow-color: #ff79c6;       /* Dracula Pink shadow */
+  --shadow-color: #ff79c6;
+  /* Dracula Pink shadow */
   --input-text-color: #bd93f9;
   --brand-color: #1e1f29;
   --scroll-thumb: #bd93f9;
@@ -87,9 +95,12 @@
 }
 
 .hud-container.theme-monochrome {
-  --primary-color: #ffffff;      /* White */
-  --secondary-color: #a3a3a3;    /* Grey */
-  --bg-card: #1f2937;            /* Cool Slate Dark */
+  --primary-color: #ffffff;
+  /* White */
+  --secondary-color: #a3a3a3;
+  /* Grey */
+  --bg-card: #1f2937;
+  /* Cool Slate Dark */
   --bg-input: #111827;
   --border-color: #111827;
   --text-color: #f3f4f6;
@@ -97,7 +108,8 @@
   --user-bubble-fg: #111827;
   --assistant-bubble-bg: #a3a3a3;
   --assistant-bubble-fg: #111827;
-  --shadow-color: #4b5563;       /* Slate Grey shadow */
+  --shadow-color: #4b5563;
+  /* Slate Grey shadow */
   --input-text-color: #ffffff;
   --brand-color: #111827;
   --scroll-thumb: #ffffff;
@@ -132,12 +144,16 @@ html {
 .hud-container {
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   width: 100vw;
   height: 100vh;
-  padding: 10px;
+  padding-top: 110px;
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-bottom: 10px;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .hud-card {
@@ -159,6 +175,7 @@ html {
   position: relative;
   justify-content: space-between;
   gap: 6px;
+  z-index: 10;
 }
 
 /* --- Overlapping TV Girl Sticker Tab (Pink + Cyan/Black Stripes) --- */
@@ -182,6 +199,27 @@ html {
 
 .hud-header:active {
   cursor: grabbing;
+}
+
+/* --- Animated Character Pet Sprite Widget --- */
+.character-pet-container {
+  position: absolute;
+  top: -5px;
+  right: 25px;
+  height: 145px;
+  width: 145px;
+  pointer-events: none;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.character-pet-sprite {
+  height: 100%;
+  width: 100%;
+  object-fit: contain;
+  filter: drop-shadow(2px 3px 0px rgba(0, 0, 0, 0.75));
 }
 
 /* Diagonal Stripes (Magenta and Sky Blue) */
@@ -1047,8 +1085,13 @@ html {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Upload Button styling */

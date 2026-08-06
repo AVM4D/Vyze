@@ -662,8 +662,8 @@ fn show_main_window(app: tauri::AppHandle) {
             }
         };
 
-        let win_width = 360;
-        let win_height = 280;
+        let win_width = 460;
+        let win_height = 420;
         let mut monitor_x = 0;
         let mut monitor_y = 0;
         let mut monitor_width = 1920;

@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "Vyze",
-        "width": 360,
-        "height": 280,
+        "width": 460,
+        "height": 420,
         "decorations": false,
         "transparent": true,
         "shadow": false,

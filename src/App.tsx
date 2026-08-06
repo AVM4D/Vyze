@@ -4,6 +4,76 @@ import { listen } from "@tauri-apps/api/event"; // Listen to selection wake even
 import ReactMarkdown from "react-markdown"; // Parse markdown output
 import "./App.css";
 
+// Import Character Sprite Frames
+import alert1 from "./assets/character/alert1.png";
+import alert2 from "./assets/character/alert2.png";
+import alert3 from "./assets/character/alert3.png";
+
+import happy1 from "./assets/character/happy1.png";
+import happy2 from "./assets/character/happy2.png";
+import happy3 from "./assets/character/happy3.png";
+
+import idle1 from "./assets/character/idle1.png";
+import idle2 from "./assets/character/idle2.png";
+import idle3 from "./assets/character/idle3.png";
+
+import listen1 from "./assets/character/listen1.png";
+import listen2 from "./assets/character/listen2.png";
+import listen3 from "./assets/character/listen3.png";
+
+import sleepy1 from "./assets/character/sleepy1.png";
+import sleepy2 from "./assets/character/sleepy2.png";
+import sleepy3 from "./assets/character/sleepy3.png";
+
+import speak1 from "./assets/character/speak1.png";
+import speak2 from "./assets/character/speak2.png";
+import speak3 from "./assets/character/speak3.png";
+
+import think1 from "./assets/character/think1.png";
+import think2 from "./assets/character/think2.png";
+import think3 from "./assets/character/think3.png";
+
+const characterSprites: Record<string, string[]> = {
+  alert: [alert1, alert2, alert3],
+  happy: [happy1, happy2, happy3],
+  idle: [idle1, idle2, idle3],
+  listen: [listen1, listen2, listen3],
+  sleepy: [sleepy1, sleepy2, sleepy3],
+  speak: [speak1, speak2, speak3],
+  think: [think1, think2, think3],
+};
+
+type CharacterMood = "idle" | "happy" | "think" | "speak" | "listen" | "alert" | "sleepy";
+
+function CharacterPet({ mood }: { mood: CharacterMood }) {
+  const [frameIdx, setFrameIdx] = useState(0);
+
+  useEffect(() => {
+    let direction = 1;
+    const interval = setInterval(() => {
+      setFrameIdx((prev) => {
+        if (prev >= 2) direction = -1;
+        if (prev <= 0) direction = 1;
+        return prev + direction;
+      });
+    }, 350);
+    return () => clearInterval(interval);
+  }, []);
+
+  const frames = characterSprites[mood] || characterSprites.idle;
+  const currentSrc = frames[frameIdx % frames.length] || frames[0];
+
+  return (
+    <div className="character-pet-container" title={`Vyze Pet (${mood})`}>
+      <img
+        src={currentSrc}
+        alt={`Character ${mood}`}
+        className="character-pet-sprite"
+      />
+    </div>
+  );
+}
+
 // Structure of chat history messages
 interface Message {
   role: "user" | "assistant";
@@ -70,6 +140,56 @@ function App() {
   const [customPrompt, setCustomPrompt] = useState<string>(() => localStorage.getItem("vyze_custom_prompt") || "");
   const [customPromptSaved, setCustomPromptSaved] = useState<boolean>(false);
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
+  const [happyBurst, setHappyBurst] = useState(false);
+  const [isSleepy, setIsSleepy] = useState(false);
+  const lastActivityRef = useRef<number>(Date.now());
+
+  // Track user activity to trigger sleepy mood after 25s of inactivity
+  useEffect(() => {
+    const handleActivity = () => {
+      lastActivityRef.current = Date.now();
+      setIsSleepy(false);
+    };
+
+    window.addEventListener("keydown", handleActivity);
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("click", handleActivity);
+
+    const interval = setInterval(() => {
+      if (Date.now() - lastActivityRef.current > 25000) {
+        setIsSleepy(true);
+      }
+    }, 3000);
+
+    return () => {
+      window.removeEventListener("keydown", handleActivity);
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("click", handleActivity);
+      clearInterval(interval);
+    };
+  }, []);
+
+  function triggerHappyBurst() {
+    setHappyBurst(true);
+    setTimeout(() => setHappyBurst(false), 2500);
+  }
+
+  let petMood: CharacterMood = "idle";
+  if (happyBurst) {
+    petMood = "happy";
+  } else if (isLoading) {
+    petMood = "think";
+  } else if (voiceState === "speaking") {
+    petMood = "speak";
+  } else if (voiceState === "dictating") {
+    petMood = "listen";
+  } else if (prompt.trim().length > 0 || selectedText || attachedImage) {
+    petMood = "alert";
+  } else if (isSleepy) {
+    petMood = "sleepy";
+  } else {
+    petMood = "idle";
+  }
 
   // API Keys & Custom Model Setup States
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem("vyze_gemini_api_key") || "");
@@ -909,6 +1029,7 @@ function App() {
     e.preventDefault();
     if (!prompt.trim()) return;
 
+    triggerHappyBurst();
     const text = prompt;
     setPrompt("");
     await triggerSubmit(text);
@@ -916,12 +1037,16 @@ function App() {
 
   return (
     <div className={`hud-container theme-${theme}`}>
+      {/* Animated Character Pet Widget (Peeks out from behind top-right of window) */}
+      <CharacterPet mood={petMood} />
+
       <div className="hud-card">
         {/* Absolute Crooked Sticker Tab Header (Pops out of the card container) */}
         <div className="hud-header" data-tauri-drag-region>
           <div className="hud-brand" data-tauri-drag-region>
             <span className="hud-title" data-tauri-drag-region>VYZE</span>
           </div>
+
           <div style={{ display: "flex", alignItems: "center" }}>
             <button
               type="button"
