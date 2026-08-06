@@ -524,8 +524,16 @@ function App() {
     }
   }
 
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
   // Text-To-Speech response reader helper
   function stopSpeaking() {
+    if (activeUtteranceRef.current) {
+      activeUtteranceRef.current.onstart = null;
+      activeUtteranceRef.current.onend = null;
+      activeUtteranceRef.current.onerror = null;
+      activeUtteranceRef.current = null;
+    }
     try {
       window.speechSynthesis.cancel();
     } catch (e) {
@@ -535,12 +543,11 @@ function App() {
   }
 
   function speakText(text: string) {
-    if (!voiceActive) {
+    stopSpeaking();
+    if (!voiceActive || !voiceNarration) {
       setVoiceState("standby");
       return;
     }
-
-    stopSpeaking();
 
     // Clean up markdown markers for natural voice synthesis
     const cleanText = text
@@ -554,12 +561,12 @@ function App() {
     }
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
+    activeUtteranceRef.current = utterance;
     utterance.volume = 1.0;
     utterance.rate = 1.0;
 
     // Find the default system voice selected by the user in OS settings
     const systemVoices = window.speechSynthesis.getVoices();
-    console.log("System voices inventory loaded by browser:", systemVoices.map(v => `${v.name} (default: ${v.default})`));
 
     // 1. Search for Prabhat/Prabahat, Ava, or Mark (case-insensitive)
     const targetVoice = systemVoices.find(
@@ -572,15 +579,10 @@ function App() {
 
     if (targetVoice) {
       utterance.voice = targetVoice;
-      console.log("Speaking using matched target voice:", targetVoice.name);
     } else {
-      // 2. Fallback to default system voice
       const defaultVoice = systemVoices.find((v) => v.default === true);
       if (defaultVoice) {
         utterance.voice = defaultVoice;
-        console.log("Speaking using user's OS default voice:", defaultVoice.name);
-      } else {
-        console.log("No custom default voice flag found, speaking with fallback default voice.");
       }
     }
 
@@ -589,12 +591,18 @@ function App() {
     };
 
     utterance.onend = () => {
-      setVoiceState("standby");
+      if (activeUtteranceRef.current === utterance) {
+        activeUtteranceRef.current = null;
+        setVoiceState("standby");
+      }
     };
 
     utterance.onerror = (e) => {
       console.error("SpeechSynthesisUtterance error:", e);
-      setVoiceState("standby");
+      if (activeUtteranceRef.current === utterance) {
+        activeUtteranceRef.current = null;
+        setVoiceState("standby");
+      }
     };
 
     setVoiceState("speaking");
