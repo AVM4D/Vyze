@@ -140,6 +140,41 @@ function App() {
   const [customPrompt, setCustomPrompt] = useState<string>(() => localStorage.getItem("vyze_custom_prompt") || "");
   const [customPromptSaved, setCustomPromptSaved] = useState<boolean>(false);
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
+
+  // Character Pet & TTS Voice Selection States
+  const [enableCharacterPet, setEnableCharacterPet] = useState<boolean>(() => {
+    return localStorage.getItem("vyze_enable_character_pet") !== "false";
+  });
+
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>(() => {
+    return localStorage.getItem("vyze_tts_voice") || "";
+  });
+
+  // Populate system TTS voices on load and when voices change in OS
+  useEffect(() => {
+    const loadVoices = () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        const voices = window.speechSynthesis.getVoices();
+        setAvailableVoices(voices);
+      }
+    };
+
+    loadVoices();
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_enable_character_pet", String(enableCharacterPet));
+    invoke("db_set_setting", { key: "enable_character_pet", value: String(enableCharacterPet) }).catch(console.error);
+  }, [enableCharacterPet]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_tts_voice", selectedVoiceName);
+    invoke("db_set_setting", { key: "tts_voice", value: selectedVoiceName }).catch(console.error);
+  }, [selectedVoiceName]);
   const [happyBurst, setHappyBurst] = useState(false);
   const [isSleepy, setIsSleepy] = useState(false);
   const lastActivityRef = useRef<number>(Date.now());
@@ -565,24 +600,30 @@ function App() {
     utterance.volume = 1.0;
     utterance.rate = 1.0;
 
-    // Find the default system voice selected by the user in OS settings
-    const systemVoices = window.speechSynthesis.getVoices();
+    // Find the voice selected by the user or fallback to system default
+    const systemVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
 
-    // 1. Search for Prabhat/Prabahat, Ava, or Mark (case-insensitive)
-    const targetVoice = systemVoices.find(
-      (v) =>
-        v.name.toLowerCase().includes("prabhat") ||
-        v.name.toLowerCase().includes("prabahat") ||
-        v.name.toLowerCase().includes("ava") ||
-        v.name.toLowerCase().includes("mark")
-    );
-
-    if (targetVoice) {
-      utterance.voice = targetVoice;
+    if (selectedVoiceName) {
+      const userSelectedVoice = systemVoices.find((v) => v.name === selectedVoiceName);
+      if (userSelectedVoice) {
+        utterance.voice = userSelectedVoice;
+      }
     } else {
-      const defaultVoice = systemVoices.find((v) => v.default === true);
-      if (defaultVoice) {
-        utterance.voice = defaultVoice;
+      const targetVoice = systemVoices.find(
+        (v) =>
+          v.name.toLowerCase().includes("prabhat") ||
+          v.name.toLowerCase().includes("prabahat") ||
+          v.name.toLowerCase().includes("ava") ||
+          v.name.toLowerCase().includes("mark")
+      );
+
+      if (targetVoice) {
+        utterance.voice = targetVoice;
+      } else {
+        const defaultVoice = systemVoices.find((v) => v.default === true);
+        if (defaultVoice) {
+          utterance.voice = defaultVoice;
+        }
       }
     }
 
@@ -1069,7 +1110,7 @@ function App() {
   return (
     <div className={`hud-container theme-${theme}`}>
       {/* Animated Character Pet Widget (Peeks out from behind top-right of window) */}
-      <CharacterPet mood={petMood} />
+      {enableCharacterPet && <CharacterPet mood={petMood} />}
 
       <div className="hud-card">
         {/* Absolute Crooked Sticker Tab Header (Pops out of the card container) */}
@@ -1336,6 +1377,17 @@ function App() {
                   <input
                     type="checkbox"
                     className="setting-checkbox"
+                    checked={enableCharacterPet}
+                    onChange={(e) => setEnableCharacterPet(e.target.checked)}
+                  />
+                  <span>Show Character</span>
+                </label>
+              </div>
+              <div className="settings-option">
+                <label className="checkbox-setting-label">
+                  <input
+                    type="checkbox"
+                    className="setting-checkbox"
                     checked={autoCopy}
                     onChange={(e) => setAutoCopy(e.target.checked)}
                   />
@@ -1353,6 +1405,23 @@ function App() {
                   <span>Read AI responses out loud (Speech)</span>
                 </label>
               </div>
+              {voiceNarration && availableVoices.length > 0 && (
+                <div className="settings-option">
+                  <label className="select-setting-label">Voice Speaker / Accent:</label>
+                  <select
+                    className="theme-select"
+                    value={selectedVoiceName}
+                    onChange={(e) => setSelectedVoiceName(e.target.value)}
+                  >
+                    <option value="">(Default OS Voice)</option>
+                    {availableVoices.map((v) => (
+                      <option key={v.name} value={v.name}>
+                        {v.name} ({v.lang})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="settings-option">
                 <label className="checkbox-setting-label">
                   <input
@@ -1461,29 +1530,27 @@ function App() {
             {/* Native Voice Dictation / Speech Stop Button */}
             <button
               type="button"
-              className={`voice-toggle-btn ${
-                voiceState === "dictating" ? "recording" : voiceState === "speaking" ? "speaking-active" : "active"
-              }`}
+              className={`voice-toggle-btn ${voiceState === "dictating" ? "recording" : voiceState === "speaking" ? "speaking-active" : "active"
+                }`}
               onClick={handleToggleVoice}
               title={
                 voiceState === "speaking"
                   ? "Click to Stop Speech Narration"
                   : voiceState === "dictating"
-                  ? "Click to Stop & Transcribe"
-                  : "Click to Speak"
+                    ? "Click to Stop & Transcribe"
+                    : "Click to Speak"
               }
             >
               <span
-                className={`voice-led ${
-                  voiceState === "dictating" ? "recording" : voiceState === "speaking" ? "speaking-led" : voiceState
-                }`}
+                className={`voice-led ${voiceState === "dictating" ? "recording" : voiceState === "speaking" ? "speaking-led" : voiceState
+                  }`}
               ></span>
               <span className="voice-text">
                 {voiceState === "speaking"
                   ? "■ STOP SPEAKING"
                   : voiceState === "dictating"
-                  ? "RECORDING..."
-                  : `VOICE: ${voiceState.toUpperCase()}`}
+                    ? "RECORDING..."
+                    : `VOICE: ${voiceState.toUpperCase()}`}
               </span>
             </button>
 
