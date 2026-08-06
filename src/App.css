@@ -1423,6 +1423,11 @@ html {
   box-shadow: 0.5px 0.5px 0px var(--border-color);
 }
 
+.run-action-btn.automation-btn {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
 .run-action-btn:disabled {
   background: #64748b !important;
   color: #ffffff;

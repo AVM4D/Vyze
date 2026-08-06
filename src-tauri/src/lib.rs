@@ -1,5 +1,6 @@
 mod ai;
 mod audio;
+mod automation;
 mod db;
 mod embeddings;
 mod fetcher;
@@ -736,6 +737,24 @@ fn show_main_window(app: tauri::AppHandle) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[tauri::command]
+async fn execute_os_automation(action_type: String, target: String) -> Result<(), String> {
+    match action_type.as_str() {
+        "open_uri" => automation::open_uri(&target).await,
+        "set_brightness" => {
+            let val: u32 = target.parse().unwrap_or(80);
+            automation::set_brightness(val).await
+        }
+        "set_volume" => {
+            let val: u32 = target.parse().unwrap_or(50);
+            automation::set_volume(val).await
+        }
+        "lock_workstation" => automation::lock_workstation().await,
+        "open_app" => automation::open_app_or_folder(&target).await,
+        _ => Err(format!("Unknown automation action: {}", action_type)),
+    }
+}
+
 pub fn run() {
     dotenvy::dotenv().ok();
     tauri::Builder::default()
@@ -759,7 +778,8 @@ pub fn run() {
             db_get_setting,
             start_voice_recording,
             stop_voice_recording,
-            run_terminal_command
+            run_terminal_command,
+            execute_os_automation
         ])
         .setup(|app| {
             // Initialize Database Manager

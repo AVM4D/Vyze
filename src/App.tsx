@@ -339,6 +339,77 @@ function App() {
     return cleanCmd || null;
   }
 
+  interface AutomationAction {
+    action: string;
+    target: string;
+    label: string;
+  }
+
+  async function handleRunAutomation(action_type: string, target: string) {
+    try {
+      setRunningCommand(`automation:${action_type}`);
+      await invoke("execute_os_automation", { actionType: action_type, target });
+      playBeep();
+      triggerHappyBurst();
+    } catch (err: any) {
+      setMessages((prev) => [...prev, { role: "assistant", content: `\n\n[OS Automation Failed]: ${err}`, image_base64: null }]);
+    } finally {
+      setRunningCommand(null);
+    }
+  }
+
+  function getRunnableAutomationAction(content: string): AutomationAction | null {
+    if (!content) return null;
+
+    // 1. Direct Code Block Match: ```automation ... ```
+    const match = /```automation\s*\n?([\s\S]*?)```/i.exec(content);
+    if (match && match[1]) {
+      const lines = match[1].split("\n");
+      let action = "";
+      let target = "";
+      for (const line of lines) {
+        if (line.toLowerCase().startsWith("action:")) {
+          action = line.substring(7).trim();
+        } else if (line.toLowerCase().startsWith("target:")) {
+          target = line.substring(7).trim();
+        }
+      }
+      if (action && target) {
+        let label = `EXECUTE ${action.toUpperCase()}`;
+        if (target.includes("youtube.com")) label = "▶ PLAY YOUTUBE VIDEO";
+        else if (target.includes("spotify:")) label = "🎵 PLAY ON SPOTIFY";
+        else if (target.includes("whatsapp:")) label = "💬 WHATSAPP ACTION";
+        else if (target.includes("mailto:")) label = "✉️ SEND EMAIL";
+        else if (action === "set_brightness") label = `💡 SET BRIGHTNESS (${target}%)`;
+        else if (action === "set_volume") label = `🔊 SET VOLUME (${target}%)`;
+        else if (action === "lock_workstation") label = "🔒 LOCK WORKSTATION";
+        else if (action === "open_app") label = `📂 OPEN ${target.toUpperCase()}`;
+
+        return { action, target, label };
+      }
+    }
+
+    // 2. Fallback heuristic detection for YouTube, Spotify, Mail, WhatsApp
+    if (content.includes("spotify:search:")) {
+      const m = /spotify:search:[^\s\)"']+/i.exec(content);
+      if (m) return { action: "open_uri", target: m[0], label: "🎵 PLAY ON SPOTIFY" };
+    }
+    if (content.includes("youtube.com/results?search_query=")) {
+      const m = /https:\/\/www\.youtube\.com\/results\?search_query=[^\s\)"']+/i.exec(content);
+      if (m) return { action: "open_uri", target: m[0], label: "▶ PLAY YOUTUBE VIDEO" };
+    }
+    if (content.includes("mailto:")) {
+      const m = /mailto:[^\s\)"']+/i.exec(content);
+      if (m) return { action: "open_uri", target: m[0], label: "✉️ SEND EMAIL" };
+    }
+    if (content.includes("whatsapp://send")) {
+      const m = /whatsapp:\/\/send[^\s\)"']+/i.exec(content);
+      if (m) return { action: "open_uri", target: m[0], label: "💬 WHATSAPP ACTION" };
+    }
+
+    return null;
+  }
+
   const autoCaptureRef = useRef(autoCapture);
   const handleCaptureScreenRef = useRef<any>(null);
 
@@ -1635,19 +1706,39 @@ function App() {
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
                         {msg.role === "assistant" && (() => {
                           const runnableCmd = getRunnableTerminalCommand(msg.content);
-                          if (!runnableCmd) return null;
-                          return (
-                            <div className="action-proposal-card">
-                              <button
-                                type="button"
-                                className="run-action-btn"
-                                disabled={runningCommand !== null}
-                                onClick={() => handleRunCommand(runnableCmd)}
-                              >
-                                {runningCommand ? "EXECUTING COMMAND..." : `▶ RUN COMMAND: ${runnableCmd.length > 30 ? runnableCmd.substring(0, 30) + '...' : runnableCmd}`}
-                              </button>
-                            </div>
-                          );
+                          const autoAction = getRunnableAutomationAction(msg.content);
+
+                          if (runnableCmd) {
+                            return (
+                              <div className="action-proposal-card">
+                                <button
+                                  type="button"
+                                  className="run-action-btn"
+                                  disabled={runningCommand !== null}
+                                  onClick={() => handleRunCommand(runnableCmd)}
+                                >
+                                  {runningCommand ? "EXECUTING COMMAND..." : `▶ RUN COMMAND: ${runnableCmd.length > 30 ? runnableCmd.substring(0, 30) + '...' : runnableCmd}`}
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          if (autoAction) {
+                            return (
+                              <div className="action-proposal-card">
+                                <button
+                                  type="button"
+                                  className="run-action-btn automation-btn"
+                                  disabled={runningCommand !== null}
+                                  onClick={() => handleRunAutomation(autoAction.action, autoAction.target)}
+                                >
+                                  {runningCommand === `automation:${autoAction.action}` ? "EXECUTING..." : autoAction.label}
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          return null;
                         })()}
                         {/* Copy button positioned absolutely in the bubble top-right corner */}
                         {msg.role === "assistant" && (
