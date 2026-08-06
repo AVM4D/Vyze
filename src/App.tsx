@@ -1547,7 +1547,7 @@ function App() {
               ></span>
               <span className="voice-text">
                 {voiceState === "speaking"
-                  ? "■ STOP SPEAKING"
+                  ? "STOP SPEAKING"
                   : voiceState === "dictating"
                     ? "RECORDING..."
                     : `VOICE: ${voiceState.toUpperCase()}`}
