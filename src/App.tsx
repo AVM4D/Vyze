@@ -525,9 +525,22 @@ function App() {
   }
 
   // Text-To-Speech response reader helper
+  function stopSpeaking() {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      console.warn("speechSynthesis cancel error:", e);
+    }
+    setVoiceState("standby");
+  }
+
   function speakText(text: string) {
-    if (!voiceActive) return;
-    window.speechSynthesis.cancel();
+    if (!voiceActive) {
+      setVoiceState("standby");
+      return;
+    }
+
+    stopSpeaking();
 
     // Clean up markdown markers for natural voice synthesis
     const cleanText = text
@@ -571,7 +584,9 @@ function App() {
       }
     }
 
-    setVoiceState("speaking");
+    utterance.onstart = () => {
+      setVoiceState("speaking");
+    };
 
     utterance.onend = () => {
       setVoiceState("standby");
@@ -582,6 +597,7 @@ function App() {
       setVoiceState("standby");
     };
 
+    setVoiceState("speaking");
     window.speechSynthesis.speak(utterance);
   }
 
@@ -725,6 +741,11 @@ function App() {
 
   // Native WASAPI Voice Dictation handler
   async function handleToggleVoice() {
+    if (voiceState === "speaking") {
+      stopSpeaking();
+      return;
+    }
+
     if (voiceState === "dictating") {
       setVoiceState("standby");
       try {
@@ -827,6 +848,9 @@ function App() {
   // Submit trigger logic
   async function triggerSubmit(promptText: string) {
     if (!promptText.trim()) return;
+
+    stopSpeaking();
+    setVoiceState("standby");
 
     // Create the clean bubble prompt shown on the screen, holding the picture if attached
     const userMsg: Message = {
@@ -985,11 +1009,10 @@ function App() {
 
   // Voice dictation submit trigger
   function handleVoiceSubmit() {
+    setVoiceState("standby");
     setPrompt((currentPrompt) => {
       if (currentPrompt.trim()) {
         triggerSubmit(currentPrompt);
-      } else {
-        setVoiceState("standby");
       }
       return ""; // clear prompt
     });
@@ -1427,16 +1450,32 @@ function App() {
           {/* Controls Bar (Voice Switch + Provider Select) */}
           <div className="controls-bar">
 
-            {/* Native Voice Dictation Switch */}
+            {/* Native Voice Dictation / Speech Stop Button */}
             <button
               type="button"
-              className={`voice-toggle-btn ${voiceState === "dictating" ? "recording" : "active"}`}
+              className={`voice-toggle-btn ${
+                voiceState === "dictating" ? "recording" : voiceState === "speaking" ? "speaking-active" : "active"
+              }`}
               onClick={handleToggleVoice}
-              title={voiceState === "dictating" ? "Click to Stop & Transcribe" : "Click to Speak"}
+              title={
+                voiceState === "speaking"
+                  ? "Click to Stop Speech Narration"
+                  : voiceState === "dictating"
+                  ? "Click to Stop & Transcribe"
+                  : "Click to Speak"
+              }
             >
-              <span className={`voice-led ${voiceState === "dictating" ? "recording" : voiceState}`}></span>
+              <span
+                className={`voice-led ${
+                  voiceState === "dictating" ? "recording" : voiceState === "speaking" ? "speaking-led" : voiceState
+                }`}
+              ></span>
               <span className="voice-text">
-                {voiceState === "dictating" ? "RECORDING..." : `VOICE: ${voiceState.toUpperCase()}`}
+                {voiceState === "speaking"
+                  ? "■ STOP SPEAKING"
+                  : voiceState === "dictating"
+                  ? "RECORDING..."
+                  : `VOICE: ${voiceState.toUpperCase()}`}
               </span>
             </button>
 
@@ -1627,25 +1666,13 @@ function App() {
               </svg>
             </label>
 
-            {voiceState === "speaking" ? (
-              <button
-                type="button"
-                className="stop-speech-btn"
-                onClick={() => {
-                  window.speechSynthesis.cancel();
-                  setVoiceState("standby");
-                }}
-                title="Stop reading response"
-              >
-                Stop
-              </button>
-            ) : isLoading ? (
+            {isLoading ? (
               <button
                 type="button"
                 className="stop-generation-btn"
                 onClick={() => {
                   setIsLoading(false);
-                  if (window.speechSynthesis) window.speechSynthesis.cancel();
+                  stopSpeaking();
                 }}
                 title="Stop AI response generation"
               >

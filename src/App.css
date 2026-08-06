@@ -758,6 +758,20 @@ html {
   box-shadow: 2px 2px 0px #ef4444;
 }
 
+.voice-toggle-btn.speaking-active {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  border-color: var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
+  animation: ledPulse 0.6s infinite alternate;
+}
+
+.voice-led.speaking-led {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 6px #ffffff;
+  animation: ledPulse 0.4s infinite alternate;
+}
+
 /* Stop Speech Button */
 .stop-speech-btn {
   background: #ef4444;
