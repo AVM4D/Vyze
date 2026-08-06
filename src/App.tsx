@@ -280,6 +280,12 @@ function App() {
   function getRunnableTerminalCommand(content: string): string | null {
     if (!content || !content.includes("```")) return null;
 
+    // Suppress action execution button if the message is primarily natural text / essay / explanation (> 120 chars of non-code text)
+    const textWithoutCode = content.replace(/```[\s\S]*?```/g, "").trim();
+    if (textWithoutCode.length > 120) {
+      return null;
+    }
+
     // Suppress commands containing placeholders like <filename>, <branch-name>
     if (/<[a-zA-Z0-9_\-\s]+>|\[[a-zA-Z0-9_\-\s]+\]/.test(content)) {
       return null;

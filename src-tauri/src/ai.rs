@@ -224,18 +224,8 @@ impl AiProvider for OllamaProvider {
                 }
             }
 
-            for (idx, msg) in history.iter().enumerate() {
-                let is_last = idx == history.len() - 1;
-                let mut content_str = msg.content.clone();
-
-                // Double enforcement for local Ollama models (qwen2.5, llama3, etc.): inject prompt rules into last user message
-                if is_last && msg.role == "user" {
-                    if let Some(ref sys) = system_prompt {
-                        if !sys.trim().is_empty() {
-                            content_str = format!("[SYSTEM RULES]: {}\n\n[USER PROMPT]: {}", sys, content_str);
-                        }
-                    }
-                }
+            for msg in history.iter() {
+                let content_str = msg.content.clone();
 
                 if let Some(ref img) = msg.image_base64 {
                     if !img.is_empty() {
