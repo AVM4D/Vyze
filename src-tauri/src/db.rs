@@ -115,6 +115,35 @@ impl DbManager {
             [],
         )?;
 
+        // 6. Session documents table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS session_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        // 7. Document embeddings chunks table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS document_embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id INTEGER NOT NULL,
+                session_id TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                chunk_text TEXT NOT NULL,
+                embedding_json TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(document_id) REFERENCES session_documents(id) ON DELETE CASCADE,
+                FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -376,4 +405,127 @@ impl DbManager {
             Ok(None)
         }
     }
+
+    // ==========================================
+    // RAG DOCUMENTS DB API
+    // ==========================================
+
+    pub fn add_document(&self, session_id: &str, file_path: &str, file_name: &str) -> Result<i64> {
+        let conn = self.get_connection()?;
+        conn.execute(
+            "INSERT INTO session_documents (session_id, file_path, file_name) VALUES (?1, ?2, ?3)",
+            params![session_id, file_path, file_name],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn add_document_chunk(
+        &self,
+        document_id: i64,
+        session_id: &str,
+        chunk_index: i32,
+        chunk_text: &str,
+        vector: &[f32],
+    ) -> Result<()> {
+        let conn = self.get_connection()?;
+        let json_str = serde_json::to_string(vector).unwrap_or_default();
+        conn.execute(
+            "INSERT INTO document_embeddings (document_id, session_id, chunk_index, chunk_text, embedding_json) 
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![document_id, session_id, chunk_index, chunk_text, json_str],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_session_documents(&self, session_id: &str) -> Result<Vec<DbDocument>> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, session_id, file_path, file_name, created_at 
+             FROM session_documents WHERE session_id = ?1 ORDER BY id DESC",
+        )?;
+        let doc_iter = stmt.query_map(params![session_id], |row| {
+            Ok(DbDocument {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                file_path: row.get(2)?,
+                file_name: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+
+        let mut list = Vec::new();
+        for d in doc_iter {
+            list.push(d?);
+        }
+        Ok(list)
+    }
+
+    pub fn delete_document(&self, document_id: i64) -> Result<()> {
+        let conn = self.get_connection()?;
+        conn.execute("DELETE FROM session_documents WHERE id = ?1", params![document_id])?;
+        Ok(())
+    }
+
+    pub fn semantic_search_documents(
+        &self,
+        session_id: &str,
+        query_vector: &[f32],
+        top_k: usize,
+        threshold: f32,
+    ) -> Result<Vec<DocumentChunkResult>> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT d.chunk_text, s.file_name, d.embedding_json
+             FROM document_embeddings d
+             JOIN session_documents s ON d.document_id = s.id
+             WHERE d.session_id = ?1",
+        )?;
+
+        let rows = stmt.query_map(params![session_id], |row| {
+            let chunk_text: String = row.get(0)?;
+            let file_name: String = row.get(1)?;
+            let json_str: String = row.get(2)?;
+            let vector: Vec<f32> = serde_json::from_str(&json_str).unwrap_or_default();
+
+            Ok((chunk_text, file_name, vector))
+        })?;
+
+        let mut candidates = Vec::new();
+        for r in rows {
+            if let Ok((text, name, vec)) = r {
+                let score = Self::cosine_similarity(query_vector, &vec);
+                if score >= threshold {
+                    candidates.push((
+                        score,
+                        DocumentChunkResult {
+                            chunk_text: text,
+                            file_name: name,
+                            score,
+                        },
+                    ));
+                }
+            }
+        }
+
+        candidates.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.truncate(top_k);
+
+        Ok(candidates.into_iter().map(|(_, res)| res).collect())
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DbDocument {
+    pub id: i64,
+    pub session_id: String,
+    pub file_path: String,
+    pub file_name: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DocumentChunkResult {
+    pub chunk_text: String,
+    pub file_name: String,
+    pub score: f32,
 }
