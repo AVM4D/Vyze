@@ -32,6 +32,7 @@ pub struct AppState {
     pub auto_capture: std::sync::Mutex<bool>,
     pub db: db::DbManager,
     pub audio_recorder: std::sync::Mutex<audio::AudioRecorder>,
+    pub active_timers: std::sync::Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<()>>>,
 }
 
 // command to toggle the auto_capture state in AppState
@@ -59,6 +60,16 @@ async fn ask_vyze(
     provider: String,
     on_token: Channel<String>,
 ) -> Result<(), String> {
+    // Sanitize chat history to prevent corrupted automation debug strings from polluting model context
+    history.retain(|msg| {
+        let content = msg.content.trim();
+        !content.contains("URI opened successfully")
+            && !content.contains("automation action:")
+            && !content.contains("app_name:")
+            && !content.starts_with("✓ opening")
+            && !content.starts_with("✓ ")
+    });
+
     // 0. Triggered Memory Lookup across past sessions
     if let Some(last_msg) = history.last() {
         let prompt_lower = last_msg.content.to_lowercase();
@@ -371,6 +382,30 @@ async fn run_terminal_command(
     cwd: Option<String>,
 ) -> Result<terminal::CommandOutput, String> {
     terminal::execute_command(&command, cwd.as_deref()).await
+}
+
+// ==========================================
+// TIMER SYSTEM IPC COMMANDS
+// ==========================================
+
+#[tauri::command]
+fn cancel_timer(state: tauri::State<'_, AppState>, id: String) -> Result<(), String> {
+    if let Ok(mut timers) = state.active_timers.lock() {
+        if let Some(tx) = timers.remove(&id) {
+            let _ = tx.send(());
+            return Ok(());
+        }
+    }
+    Err("Timer not found or already completed".to_string())
+}
+
+#[tauri::command]
+fn get_active_timers(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+    if let Ok(timers) = state.active_timers.lock() {
+        Ok(timers.keys().cloned().collect())
+    } else {
+        Err("Failed to lock active timers".to_string())
+    }
 }
 
 // A command that reads plain text from the system clipboard
@@ -738,19 +773,91 @@ fn show_main_window(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[tauri::command]
-async fn execute_os_automation(action_type: String, target: String) -> Result<(), String> {
+async fn execute_os_automation(app: tauri::AppHandle, action_type: String, target: String) -> Result<String, String> {
     match action_type.as_str() {
-        "open_uri" => automation::open_uri(&target).await,
+        "open_uri" => automation::open_uri(&target).await.map(|_| "URI opened successfully".to_string()),
         "set_brightness" => {
             let val: u32 = target.parse().unwrap_or(80);
-            automation::set_brightness(val).await
+            automation::set_brightness(val).await.map(|_| format!("Brightness adjusted to {}%", val))
         }
         "set_volume" => {
             let val: u32 = target.parse().unwrap_or(50);
-            automation::set_volume(val).await
+            automation::set_volume(val).await.map(|_| format!("Volume set to {}%", val))
         }
-        "lock_workstation" => automation::lock_workstation().await,
-        "open_app" => automation::open_app_or_folder(&target).await,
+        "media_control" => automation::media_control(&target).await.map(|_| format!("Media command '{}' dispatched", target)),
+        "power_control" => automation::power_control(&target).await.map(|_| format!("Power action '{}' executed", target)),
+        "window_management" => automation::window_management(&target).await.map(|_| "Window action executed".to_string()),
+        "search_dev" | "search_web" => {
+            let parts: Vec<&str> = target.splitn(2, '|').collect();
+            let platform = parts.first().copied().unwrap_or("google");
+            let query = parts.get(1).copied().unwrap_or("");
+            automation::search_web_or_dev(platform, query).await.map(|_| format!("Searching {} for '{}'", platform, query))
+        }
+        "system_status" => automation::get_system_status().await,
+        "process_control" => {
+            let parts: Vec<&str> = target.splitn(2, '|').collect();
+            let action = parts.first().copied().unwrap_or("list");
+            let name = parts.get(1).copied().unwrap_or("");
+            automation::process_control(action, name).await
+        }
+        "open_app" => automation::open_app_or_folder(&target).await.map(|_| format!("Launched {}", target)),
+        "create_file" => automation::create_file(&target).await,
+        "search_files" => automation::search_files(&target).await,
+        "set_timer" => {
+            // Target format: "duration_secs|label"
+            let parts: Vec<&str> = target.splitn(2, '|').collect();
+            let secs: u64 = parts.first().copied().unwrap_or("0").parse().unwrap_or(0);
+            let label = parts.get(1).copied().unwrap_or("Timer").to_string();
+
+            let timer_id = uuid::Uuid::new_v4().to_string();
+            let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+
+            let state = app.state::<AppState>();
+            if let Ok(mut timers) = state.active_timers.lock() {
+                timers.insert(timer_id.clone(), tx);
+            }
+
+            let app_clone = app.clone();
+            let id_clone = timer_id.clone();
+            let label_clone = label.clone();
+
+            tauri::async_runtime::spawn(async move {
+                tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(secs)) => {
+                        // Remove from active list
+                        if let Ok(mut timers) = app_clone.state::<AppState>().active_timers.lock() {
+                            timers.remove(&id_clone);
+                        }
+                        // Notify frontend
+                        let _ = app_clone.emit("timer-finished", serde_json::json!({
+                            "id": id_clone,
+                            "label": label_clone,
+                            "duration_secs": secs
+                        }));
+                    }
+                    _ = rx => {
+                        // Cancelled, do nothing
+                    }
+                }
+            });
+
+            // Return JSON details so frontend can track it
+            Ok(serde_json::json!({
+                "id": timer_id,
+                "label": label,
+                "duration_secs": secs
+            }).to_string())
+        }
+        "cancel_timer" => {
+            let state = app.state::<AppState>();
+            if let Ok(mut timers) = state.active_timers.lock() {
+                if let Some(tx) = timers.remove(&target) {
+                    let _ = tx.send(());
+                    return Ok(format!("Timer '{}' cancelled", target));
+                }
+            }
+            Err("Timer not found or already completed".to_string())
+        }
         _ => Err(format!("Unknown automation action: {}", action_type)),
     }
 }
@@ -779,7 +886,9 @@ pub fn run() {
             start_voice_recording,
             stop_voice_recording,
             run_terminal_command,
-            execute_os_automation
+            execute_os_automation,
+            cancel_timer,
+            get_active_timers
         ])
         .setup(|app| {
             // Initialize Database Manager
@@ -796,6 +905,7 @@ pub fn run() {
                 auto_capture: std::sync::Mutex::new(false),
                 db: db_manager,
                 audio_recorder: std::sync::Mutex::new(audio::AudioRecorder::new()),
+                active_timers: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
 
             // 1. System Tray setup
