@@ -171,6 +171,14 @@ function App() {
   const [customPromptSaved, setCustomPromptSaved] = useState<boolean>(false);
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
 
+  // Session Documents RAG state variables
+  const [sessionAttachments, setSessionAttachments] = useState<any[]>([]);
+  const [ragProgress, setRagProgress] = useState<any>(null);
+  const activeSessionIdRef = useRef(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   // Character Pet & TTS Voice Selection States
   const [enableCharacterPet, setEnableCharacterPet] = useState<boolean>(() => {
     return localStorage.getItem("vyze_enable_character_pet") !== "false";
@@ -945,6 +953,14 @@ function App() {
         image_base64: m.image_base64,
       }));
       setMessages(converted);
+
+      // Load session attachments
+      try {
+        const docs = await invoke<any[]>("get_session_attachments", { sessionId: sid });
+        setSessionAttachments(docs);
+      } catch (err) {
+        console.error("Failed to load session attachments:", err);
+      }
     } catch (err) {
       console.error("Failed to load messages for session:", err);
     }
@@ -957,9 +973,45 @@ function App() {
       setSessions(updated);
       setActiveSessionId(newId);
       setMessages([]);
+      setSessionAttachments([]); // Clear attachments
       setShowSidebar(false);
     } catch (err) {
       console.error("Failed to create new session:", err);
+    }
+  }
+
+  async function handleAttachFilesToSession() {
+    if (!activeSessionId) return;
+    try {
+      const msg = await invoke<string>("select_and_attach_files", {
+        sessionId: activeSessionId,
+        provider: provider
+      });
+      console.log(msg);
+    } catch (err) {
+      console.error("Failed to attach files to session:", err);
+    }
+  }
+
+  async function handleAttachFolderToSession() {
+    if (!activeSessionId) return;
+    try {
+      const msg = await invoke<string>("select_and_attach_folder", {
+        sessionId: activeSessionId,
+        provider: provider
+      });
+      console.log(msg);
+    } catch (err) {
+      console.error("Failed to attach folder to session:", err);
+    }
+  }
+
+  async function handleDetachDocument(docId: number) {
+    try {
+      await invoke("delete_session_attachment", { documentId: docId });
+      setSessionAttachments((prev) => prev.filter((d) => d.id !== docId));
+    } catch (err) {
+      console.error("Failed to detach document from session:", err);
     }
   }
 
@@ -981,6 +1033,7 @@ function App() {
         } else {
           setActiveSessionId(null);
           setMessages([]);
+          setSessionAttachments([]);
         }
       }
     } catch (err) {
@@ -996,6 +1049,7 @@ function App() {
       setSessions([]);
       setActiveSessionId(null);
       setMessages([]);
+      setSessionAttachments([]); // Clear attachments
       setShowSidebar(false);
     } catch (err) {
       console.error("Failed to clear sessions:", err);
@@ -1310,6 +1364,7 @@ function App() {
     let unlistenTextFn: (() => void) | null = null;
     let unlistenScreenFn: (() => void) | null = null;
     let unlistenTimerFn: (() => void) | null = null;
+    let unlistenRagFn: (() => void) | null = null;
 
     async function setupListeners() {
       // Listen for text selection capture
@@ -1352,6 +1407,23 @@ function App() {
         // Remove timer from the local React list
         setActiveTimers((prev) => prev.filter((t) => t.id !== id));
       });
+
+      // Listen for RAG ingestion progress events
+      unlistenRagFn = await listen<any>("rag-progress", (event) => {
+        const payload = event.payload;
+        setRagProgress(payload);
+        
+        if (payload.status === "complete") {
+          playBeep();
+          const currentSid = activeSessionIdRef.current;
+          if (currentSid) {
+            invoke<any[]>("get_session_attachments", { sessionId: currentSid })
+              .then(setSessionAttachments)
+              .catch(console.error);
+          }
+          setTimeout(() => setRagProgress(null), 3500);
+        }
+      });
     }
 
     setupListeners();
@@ -1361,6 +1433,7 @@ function App() {
       if (unlistenTextFn) unlistenTextFn();
       if (unlistenScreenFn) unlistenScreenFn();
       if (unlistenTimerFn) unlistenTimerFn();
+      if (unlistenRagFn) unlistenRagFn();
     };
   }, []);
 
@@ -2207,6 +2280,50 @@ function App() {
             </div>
           )}
 
+          {/* Session Documents/Folders Attachments Tray */}
+          {sessionAttachments.length > 0 && (
+            <div className="attachments-tray" style={{ margin: "4px 12px", padding: "6px 8px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "4px" }}>
+              <div style={{ fontSize: "0.65em", fontWeight: "bold", color: "var(--fg-main)", marginBottom: "4px", opacity: 0.8, textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", justifyContent: "space-between" }}>
+                <span>Attached Knowledge Base</span>
+                <span style={{ color: "var(--primary-color)" }}>{sessionAttachments.length} files</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                {sessionAttachments.map((doc) => (
+                  <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: "4px", background: "var(--bg-input)", padding: "2px 6px", borderRadius: "3px", fontSize: "0.75em", border: "1.1px solid var(--border-color)" }}>
+                    <span style={{ color: "var(--primary-color)", fontSize: "0.95em" }}>📄</span>
+                    <span style={{ color: "var(--fg-main)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={doc.file_path}>
+                      {doc.file_name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDetachDocument(doc.id)}
+                      style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "1.1em", padding: "0 2px" }}
+                      title="Remove document from chat context"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* RAG indexing progress banner */}
+          {ragProgress && (
+            <div className="rag-progress-banner" style={{ margin: "4px 12px", padding: "6px 8px", background: "rgba(234, 179, 8, 0.12)", border: "1px solid rgba(234, 179, 8, 0.25)", borderRadius: "4px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.72em", color: "var(--fg-main)" }}>
+                <span className="spinner" style={{ display: "inline-block", width: "9px", height: "9px", border: "1.5px solid var(--fg-main)", borderTopColor: "transparent", borderRadius: "50%", marginRight: "4px" }}></span>
+                {ragProgress.status === "processing" ? (
+                  <span>Indexing: <strong style={{ color: "var(--primary-color)" }}>{ragProgress.file_name}</strong> ({ragProgress.current}/{ragProgress.total})</span>
+                ) : ragProgress.status === "complete" ? (
+                  <span style={{ color: "#22c55e", fontWeight: "bold" }}>✓ Indexing complete! ({ragProgress.total_ingested} files loaded)</span>
+                ) : (
+                  <span>Initializing document indexer...</span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Active Timers List Drawer */}
           {activeTimers.length > 0 && (
             <div className="active-timers-container" style={{ margin: "8px 12px", padding: "8px", background: "rgba(0,0,0,0.2)", border: "1.5px solid var(--border-color)", borderRadius: "4px" }}>
@@ -2380,6 +2497,37 @@ function App() {
               )}
             </button>
 
+            {/* Add Session Files Attachment Button */}
+            <button
+              type="button"
+              className="upload-btn"
+              onClick={handleAttachFilesToSession}
+              disabled={isLoading || !activeSessionId}
+              title="Attach Files to this Chat (Session RAG)"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="12" y1="18" x2="12" y2="12"></line>
+                <line x1="9" y1="15" x2="15" y2="15"></line>
+              </svg>
+            </button>
+
+            {/* Add Session Folder Attachment Button */}
+            <button
+              type="button"
+              className="upload-btn"
+              onClick={handleAttachFolderToSession}
+              disabled={isLoading || !activeSessionId}
+              title="Attach Folder to this Chat (Session RAG)"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                <line x1="12" y1="17" x2="12" y2="11"></line>
+                <line x1="9" y1="14" x2="15" y2="14"></line>
+              </svg>
+            </button>
+
             {/* Hidden file input */}
             <input
               type="file"
@@ -2393,7 +2541,7 @@ function App() {
             <label
               htmlFor="file-upload-input"
               className="upload-btn"
-              title="Attach image or text document"
+              title="Attach image or text document to prompt"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
