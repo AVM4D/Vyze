@@ -3,6 +3,7 @@ mod audio;
 mod automation;
 mod db;
 mod embeddings;
+mod rag;
 mod fetcher;
 mod personas;
 mod stt;
@@ -182,6 +183,32 @@ async fn ask_vyze(
                         "\n\n[Attached File Content from '{}']:\n{}\n",
                         clean_word, file_content
                     ));
+                }
+            }
+        }
+    }
+
+    // 0.7. Session-level Document RAG context retrieval
+    if let Some(ref current_sid) = session_id {
+        if let Ok(docs) = state.db.get_session_documents(current_sid) {
+            if !docs.is_empty() {
+                if let Some(last_msg_mut) = history.last_mut() {
+                    // Generate embedding for user prompt
+                    if let Ok(query_vec) = embeddings::generate_embedding(&last_msg_mut.content, &provider).await {
+                        // Retrieve top 5 matching text chunks from session documents
+                        if let Ok(chunks) = state.db.semantic_search_documents(current_sid, &query_vec, 5, 0.35) {
+                            if !chunks.is_empty() {
+                                let mut context_text = String::from("\n\n[Retrieved Context from Session Documents/Folders]:\n");
+                                for chunk in chunks {
+                                    context_text.push_str(&format!(
+                                        "--- Context from file '{}' (Score: {:.2}) ---\n{}\n",
+                                        chunk.file_name, chunk.score, chunk.chunk_text
+                                    ));
+                                }
+                                last_msg_mut.content.push_str(&context_text);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -862,6 +889,159 @@ async fn execute_os_automation(app: tauri::AppHandle, action_type: String, targe
     }
 }
 
+#[tauri::command]
+async fn select_and_attach_files(
+    app: tauri::AppHandle,
+    session_id: String,
+    provider: String,
+) -> Result<String, String> {
+    // Open a PowerShell multi-select OpenFileDialog
+    let script = r#"
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog = New-Object System.Windows.Forms.OpenFileDialog
+        $dialog.Multiselect = $true
+        $dialog.Filter = "Text Files (*.txt;*.md;*.json;*.toml;*.rs;*.tsx;*.ts;*.py;*.go;*.java;*.cpp;*.h;*.js;*.css;*.html;*.sh;*.bat;*.ps1)|*.txt;*.md;*.json;*.toml;*.rs;*.tsx;*.ts;*.py;*.go;*.java;*.cpp;*.h;*.js;*.css;*.html;*.sh;*.bat;*.ps1|All Files (*.*)|*.*"
+        $dialog.Title = "Select Files to Attach to Chat Session"
+        $res = $dialog.ShowDialog()
+        if ($res -eq "OK") {
+            $dialog.FileNames | Out-String
+        } else {
+            ""
+        }
+    "#;
+    
+    let output = std::process::Command::new("powershell")
+        .args(&["-NoProfile", "-Command", script])
+        .output()
+        .map_err(|e| format!("Failed to launch file picker: {}", e))?;
+        
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.is_empty() {
+        return Ok("No files selected".to_string());
+    }
+    
+    let paths: Vec<String> = stdout
+        .lines()
+        .map(|line| line.trim().to_string())
+        .filter(|line| !line.is_empty())
+        .collect();
+        
+    let total = paths.len();
+    
+    // Spawn ingestion in background
+    let app_clone = app.clone();
+    let session_id_clone = session_id.clone();
+    let provider_clone = provider.clone();
+    
+    tokio::spawn(async move {
+        let state = app_clone.state::<AppState>();
+        let _ = app_clone.emit("rag-progress", serde_json::json!({
+            "status": "start",
+            "total": total
+        }));
+        
+        let mut count = 0;
+        for (i, p) in paths.iter().enumerate() {
+            let path = std::path::Path::new(p);
+            let name = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+                
+            let _ = app_clone.emit("rag-progress", serde_json::json!({
+                "status": "processing",
+                "file_name": name,
+                "current": i + 1,
+                "total": total
+            }));
+            
+            // Add file to DB metadata
+            if let Ok(doc_id) = state.db.add_document(&session_id_clone, p, &name) {
+                // Chunk and embedding ingest
+                if let Err(e) = rag::ingest_file(&app_clone, &session_id_clone, path, &provider_clone, doc_id).await {
+                    let _ = state.db.delete_document(doc_id);
+                    println!("Failed to ingest file {}: {}", name, e);
+                } else {
+                    count += 1;
+                }
+            }
+        }
+        
+        let _ = app_clone.emit("rag-progress", serde_json::json!({
+            "status": "complete",
+            "total_ingested": count
+        }));
+    });
+    
+    Ok(format!("Ingesting {} files in background...", total))
+}
+
+#[tauri::command]
+async fn select_and_attach_folder(
+    app: tauri::AppHandle,
+    session_id: String,
+    provider: String,
+) -> Result<String, String> {
+    // Open a PowerShell FolderBrowserDialog
+    let script = r#"
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = "Select Folder to Attach to Chat Session"
+        $res = $dialog.ShowDialog()
+        if ($res -eq "OK") {
+            $dialog.SelectedPath
+        } else {
+            ""
+        }
+    "#;
+    
+    let output = std::process::Command::new("powershell")
+        .args(&["-NoProfile", "-Command", script])
+        .output()
+        .map_err(|e| format!("Failed to launch folder picker: {}", e))?;
+        
+    let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path_str.is_empty() {
+        return Ok("No folder selected".to_string());
+    }
+    
+    let path = std::path::PathBuf::from(&path_str);
+    
+    // Ingest folder in background
+    let app_clone = app.clone();
+    let session_id_clone = session_id.clone();
+    let provider_clone = provider.clone();
+    
+    tokio::spawn(async move {
+        let _ = app_clone.emit("rag-progress", serde_json::json!({
+            "status": "start",
+            "folder_name": path.file_name().and_then(|n| n.to_str()).unwrap_or("folder")
+        }));
+        
+        let _ = rag::ingest_folder(&app_clone, &session_id_clone, &path, &provider_clone).await;
+    });
+    
+    Ok(format!("Ingesting folder in background..."))
+}
+
+#[tauri::command]
+fn get_session_attachments(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<Vec<db::DbDocument>, String> {
+    state.db.get_session_documents(&session_id)
+        .map_err(|e| format!("Failed to retrieve documents: {}", e))
+}
+
+#[tauri::command]
+fn delete_session_attachment(
+    state: tauri::State<'_, AppState>,
+    document_id: i64,
+) -> Result<(), String> {
+    state.db.delete_document(document_id)
+        .map_err(|e| format!("Failed to delete document: {}", e))
+}
+
 pub fn run() {
     dotenvy::dotenv().ok();
     tauri::Builder::default()
@@ -888,7 +1068,11 @@ pub fn run() {
             run_terminal_command,
             execute_os_automation,
             cancel_timer,
-            get_active_timers
+            get_active_timers,
+            select_and_attach_files,
+            select_and_attach_folder,
+            get_session_attachments,
+            delete_session_attachment
         ])
         .setup(|app| {
             // Initialize Database Manager
