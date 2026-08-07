@@ -110,7 +110,7 @@ function App() {
   const inputRef = useRef<HTMLInputElement>(null); // Ref to auto-focus prompt bar
 
   // Voice States
-  const [voiceActive, setVoiceActive] = useState(true); // If background listening is enabled
+  const [voiceActive, _setVoiceActive] = useState(true); // If background listening is enabled
   const [voiceState, setVoiceState] = useState<"standby" | "dictating" | "speaking">("standby");
   const voiceStateRef = useRef(voiceState);
 
@@ -138,6 +138,36 @@ function App() {
 
   const [persona, setPersona] = useState<string>(() => localStorage.getItem("vyze_persona") || "balanced");
   const [customPrompt, setCustomPrompt] = useState<string>(() => localStorage.getItem("vyze_custom_prompt") || "");
+
+  // Active Timers State and cancel handler
+  interface ActiveTimer {
+    id: string;
+    label: string;
+    duration_secs: number;
+    remaining_secs: number;
+  }
+  const [activeTimers, setActiveTimers] = useState<ActiveTimer[]>([]);
+
+  async function handleCancelTimer(id: string) {
+    try {
+      await invoke("cancel_timer", { id });
+      setActiveTimers((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      console.error("Failed to cancel timer:", err);
+    }
+  }
+
+  // Active timers countdown tick
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTimers((prev) => {
+        return prev
+          .map((t) => ({ ...t, remaining_secs: t.remaining_secs - 1 }))
+          .filter((t) => t.remaining_secs > 0);
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
   const [customPromptSaved, setCustomPromptSaved] = useState<boolean>(false);
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
 
@@ -286,6 +316,11 @@ function App() {
       return null;
     }
 
+    // Suppress automation block pseudo-code from being run as terminal commands
+    if (content.includes("```automation") || content.includes("action:") || content.includes("app_name:")) {
+      return null;
+    }
+
     // Suppress commands containing placeholders like <filename>, <branch-name>
     if (/<[a-zA-Z0-9_\-\s]+>|\[[a-zA-Z0-9_\-\s]+\]/.test(content)) {
       return null;
@@ -318,7 +353,9 @@ function App() {
             !trimmed.startsWith("#") &&
             !trimmed.startsWith("//") &&
             !trimmed.toLowerCase().startsWith("step ") &&
-            !trimmed.toLowerCase().startsWith("option ")
+            !trimmed.toLowerCase().startsWith("option ") &&
+            !trimmed.toLowerCase().startsWith("action:") &&
+            !trimmed.toLowerCase().startsWith("app_name:")
           ) {
             extractedLines.push(trimmed);
           }
@@ -348,9 +385,32 @@ function App() {
   async function handleRunAutomation(action_type: string, target: string) {
     try {
       setRunningCommand(`automation:${action_type}`);
-      await invoke("execute_os_automation", { actionType: action_type, target });
+      const res = await invoke<string>("execute_os_automation", { actionType: action_type, target });
       playBeep();
       triggerHappyBurst();
+
+      let displayRes = res;
+      if (action_type === "set_timer") {
+        try {
+          const timerData = JSON.parse(res);
+          setActiveTimers((prev) => [
+            ...prev,
+            {
+              id: timerData.id,
+              label: timerData.label,
+              duration_secs: timerData.duration_secs,
+              remaining_secs: timerData.duration_secs,
+            }
+          ]);
+          displayRes = `⏰ Timer set for ${timerData.duration_secs} seconds: "${timerData.label}"`;
+        } catch (e) {
+          console.error("Failed to parse timer JSON response:", e);
+        }
+      }
+
+      if (displayRes && displayRes !== "Execution successful" && displayRes !== "URI opened successfully" && !displayRes.startsWith("Launched")) {
+        setMessages((prev) => [...prev, { role: "assistant", content: `\n\n${displayRes}`, image_base64: null }]);
+      }
     } catch (err: any) {
       setMessages((prev) => [...prev, { role: "assistant", content: `\n\n[OS Automation Failed]: ${err}`, image_base64: null }]);
     } finally {
@@ -372,39 +432,387 @@ function App() {
           action = line.substring(7).trim();
         } else if (line.toLowerCase().startsWith("target:")) {
           target = line.substring(7).trim();
+        } else if (line.toLowerCase().startsWith("app_name:")) {
+          action = "open_app";
+          target = line.substring(9).trim();
         }
       }
       if (action && target) {
-        let label = `EXECUTE ${action.toUpperCase()}`;
-        if (target.includes("youtube.com")) label = "▶ PLAY YOUTUBE VIDEO";
-        else if (target.includes("spotify:")) label = "🎵 PLAY ON SPOTIFY";
-        else if (target.includes("whatsapp:")) label = "💬 WHATSAPP ACTION";
-        else if (target.includes("mailto:")) label = "✉️ SEND EMAIL";
-        else if (action === "set_brightness") label = `💡 SET BRIGHTNESS (${target}%)`;
-        else if (action === "set_volume") label = `🔊 SET VOLUME (${target}%)`;
-        else if (action === "lock_workstation") label = "🔒 LOCK WORKSTATION";
-        else if (action === "open_app") label = `📂 OPEN ${target.toUpperCase()}`;
+        let label = `executing ${action.toLowerCase()}...`;
+        if (target.includes("youtube.com")) label = "opening youtube...";
+        else if (target.includes("spotify:") || target.toLowerCase() === "spotify") label = "opening spotify...";
+        else if (target.includes("whatsapp:")) label = "opening whatsapp...";
+        else if (target.includes("mailto:")) label = "opening mail client...";
+        else if (action === "set_brightness") label = `adjusting brightness to ${target}%...`;
+        else if (action === "set_volume") label = `adjusting volume to ${target}%...`;
+        else if (action === "power_control") label = `executing ${target}...`;
+        else if (action === "media_control") label = `media command: ${target}...`;
+        else if (action === "system_status") label = "fetching system status...";
+        else if (action === "open_app") label = `opening ${target.toLowerCase()}...`;
 
         return { action, target, label };
       }
     }
 
-    // 2. Fallback heuristic detection for YouTube, Spotify, Mail, WhatsApp
-    if (content.includes("spotify:search:")) {
-      const m = /spotify:search:[^\s\)"']+/i.exec(content);
-      if (m) return { action: "open_uri", target: m[0], label: "🎵 PLAY ON SPOTIFY" };
+    return null;
+  }
+
+  function parsePromptAutomationIntent(promptText: string): AutomationAction | null {
+    const clean = promptText.trim().toLowerCase();
+    if (!clean) return null;
+
+    // 1. Media Controls
+    if (clean === "pause" || clean === "play" || clean === "resume" || clean === "pause music" || clean === "play music" || clean === "toggle playback") {
+      return { action: "media_control", target: "play_pause", label: "toggling media playback..." };
     }
-    if (content.includes("youtube.com/results?search_query=")) {
-      const m = /https:\/\/www\.youtube\.com\/results\?search_query=[^\s\)"']+/i.exec(content);
-      if (m) return { action: "open_uri", target: m[0], label: "▶ PLAY YOUTUBE VIDEO" };
+    if (clean === "next" || clean === "next song" || clean === "next track" || clean === "skip song") {
+      return { action: "media_control", target: "next", label: "skipping to next track..." };
     }
-    if (content.includes("mailto:")) {
-      const m = /mailto:[^\s\)"']+/i.exec(content);
-      if (m) return { action: "open_uri", target: m[0], label: "✉️ SEND EMAIL" };
+    if (clean === "prev" || clean === "previous" || clean === "prev song" || clean === "previous track") {
+      return { action: "media_control", target: "prev", label: "previous track..." };
     }
-    if (content.includes("whatsapp://send")) {
-      const m = /whatsapp:\/\/send[^\s\)"']+/i.exec(content);
-      if (m) return { action: "open_uri", target: m[0], label: "💬 WHATSAPP ACTION" };
+    if (clean === "unmute") {
+      return { action: "media_control", target: "unmute", label: "unmuting audio..." };
+    }
+    if (clean === "mute" || clean === "mute audio") {
+      return { action: "media_control", target: "mute", label: "muting audio..." };
+    }
+    if (clean === "volume up" || clean === "louder") {
+      return { action: "media_control", target: "volume_up", label: "increasing volume..." };
+    }
+    if (clean === "volume down" || clean === "quieter") {
+      return { action: "media_control", target: "volume_down", label: "decreasing volume..." };
+    }
+
+    // 2. WhatsApp Direct Intent
+    if (clean.includes("whatsapp")) {
+      const callMatch = /(?:whatsapp call|call on whatsapp|call)\s+(\+?\d+)/i.exec(promptText);
+      if (callMatch) {
+        const phone = callMatch[1];
+        return {
+          action: "open_uri",
+          target: `whatsapp://call?phone=${phone}`,
+          label: `initiating WhatsApp call to ${phone}...`
+        };
+      }
+      const msgMatch = /(?:send\s+)?whatsapp\s*(?:message\s+to\s+)?(\+?\d+)\s*(?:saying|message|text)?\s*(.+)/i.exec(promptText);
+      if (msgMatch) {
+        const phone = msgMatch[1];
+        const text = encodeURIComponent(msgMatch[2].trim());
+        return {
+          action: "open_uri",
+          target: `whatsapp://send?phone=${phone}&text=${text}`,
+          label: `sending WhatsApp message to ${phone}...`
+        };
+      }
+    }
+
+    // 3. Email Direct Intent
+    if (clean.includes("email") || clean.includes("mail") || clean.includes("mailto")) {
+      const emailRegex = /([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4})/;
+      const emailMatch = emailRegex.exec(promptText);
+      if (emailMatch) {
+        const email = emailMatch[1];
+        let subject = "Vyze Draft";
+        let body = "";
+        
+        const subjectMatch = /subject\s+([^body]+)/i.exec(promptText);
+        const bodyMatch = /body\s+(.+)/i.exec(promptText);
+        const sayingMatch = /saying\s+(.+)/i.exec(promptText);
+        
+        if (subjectMatch) {
+          subject = subjectMatch[1].trim();
+        }
+        if (bodyMatch) {
+          body = bodyMatch[1].trim();
+        } else if (sayingMatch) {
+          body = sayingMatch[1].trim();
+        }
+        
+        return {
+          action: "open_uri",
+          target: `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
+          label: `drafting email to ${email}...`
+        };
+      }
+    }
+
+    // 4. Discord Direct Intent
+    if (clean.includes("discord")) {
+      const serverChannelMatch = /discord\s+(?:server|guild)\s+(\d+)\s+channel\s+(\d+)/i.exec(promptText);
+      if (serverChannelMatch) {
+        return {
+          action: "open_uri",
+          target: `discord://discord.com/channels/${serverChannelMatch[1]}/${serverChannelMatch[2]}`,
+          label: `jumping to Discord channel ${serverChannelMatch[2]}...`
+        };
+      }
+      const serverMatch = /discord\s+(?:server|guild)\s+(\d+)/i.exec(promptText);
+      if (serverMatch) {
+        return {
+          action: "open_uri",
+          target: `discord://discord.com/channels/${serverMatch[1]}`,
+          label: `jumping to Discord server ${serverMatch[1]}...`
+        };
+      }
+      const channelMatch = /discord\s+channel\s+(\d+)/i.exec(promptText);
+      if (channelMatch) {
+        return {
+          action: "open_uri",
+          target: `discord://discord.com/channels/@me/${channelMatch[1]}`,
+          label: `jumping to Discord DM/Channel ${channelMatch[1]}...`
+        };
+      }
+    }
+
+    // 5. Timers & Reminders Direct Intent
+    if (clean.includes("timer") || clean.includes("remind")) {
+      const remindMatch = /remind me to\s+(.+?)\s+in\s+(\d+)\s*(hour|minute|second|min|sec|hr)s?/i.exec(promptText);
+      if (remindMatch) {
+        const label = remindMatch[1].trim();
+        const val = parseInt(remindMatch[2], 10);
+        const unit = remindMatch[3].toLowerCase();
+        let multiplier = 1;
+        if (unit.startsWith("min")) multiplier = 60;
+        else if (unit.startsWith("hour") || unit.startsWith("hr")) multiplier = 3600;
+        
+        const totalSecs = val * multiplier;
+        return {
+          action: "set_timer",
+          target: `${totalSecs}|${label}`,
+          label: `setting reminder for '${label}' in ${val} ${unit}...`
+        };
+      }
+      
+      const timerMatch = /(?:set\s+a?\s*timer\s+(?:for|of)?\s*)?(\d+)\s*(hour|minute|second|min|sec|hr)s?\s*(?:called|for|named)?\s*(.*)/i.exec(promptText);
+      if (timerMatch) {
+        const val = parseInt(timerMatch[1], 10);
+        const unit = timerMatch[2].toLowerCase();
+        const label = timerMatch[3].trim() || "Timer";
+        let multiplier = 1;
+        if (unit.startsWith("min")) multiplier = 60;
+        else if (unit.startsWith("hour") || unit.startsWith("hr")) multiplier = 3600;
+        
+        const totalSecs = val * multiplier;
+        return {
+          action: "set_timer",
+          target: `${totalSecs}|${label}`,
+          label: `setting timer for ${val} ${unit} (${label})...`
+        };
+      }
+    }
+
+    // 6. File Utilities (Create & Search) Direct Intent
+    if (clean.includes("file") || clean.includes("note")) {
+      const createFileMatch = /(?:create|make)\s+file\s+(\S+)\s+(?:with content|containing)\s+(.+)/i.exec(promptText);
+      if (createFileMatch) {
+        return {
+          action: "create_file",
+          target: `${createFileMatch[1]}|${createFileMatch[2].trim()}`,
+          label: `creating file '${createFileMatch[1]}' on Desktop...`
+        };
+      }
+      const createNoteMatch = /(?:create|make)\s+note\s+(\S+)\s+(?:with content|containing)\s+(.+)/i.exec(promptText);
+      if (createNoteMatch) {
+        return {
+          action: "create_file",
+          target: `${createNoteMatch[1]}|${createNoteMatch[2].trim()}`,
+          label: `creating note '${createNoteMatch[1]}'...`
+        };
+      }
+      const quickNoteMatch = /(?:create|make)\s+note\s+(.+)/i.exec(promptText);
+      if (quickNoteMatch) {
+        return {
+          action: "create_file",
+          target: `note.txt|${quickNoteMatch[1].trim()}`,
+          label: "creating note.txt on Desktop..."
+        };
+      }
+      const searchMatch = /(?:search|find)\s+(?:local\s+)?files\s+(?:for|matching)\s+(.+)/i.exec(promptText);
+      if (searchMatch) {
+        return {
+          action: "search_files",
+          target: searchMatch[1].trim(),
+          label: `searching files for '${searchMatch[1].trim()}'...`
+        };
+      }
+    }
+
+    // 7. Local File Explorer Search Intent (search-ms: protocol)
+    if (
+      clean.startsWith("search files for ") ||
+      clean.startsWith("search local files for ") ||
+      clean.startsWith("search file explorer for ") ||
+      clean.startsWith("search files ") ||
+      clean.startsWith("search local files ") ||
+      clean.startsWith("find file ") ||
+      clean.startsWith("find folder ") ||
+      clean.includes("in file explorer") ||
+      clean.includes("in explorer")
+    ) {
+      const q = promptText
+        .replace(/^(?:search|find)\s+(?:local\s+)?(?:files|folder|file explorer)?\s*(?:for|in)?\s*/i, "")
+        .replace(/\s+in (?:file )?explorer$/i, "")
+        .trim();
+      if (q) {
+        return {
+          action: "open_uri",
+          target: `search-ms:query=${encodeURIComponent(q)}`,
+          label: `searching File Explorer for '${q}'...`
+        };
+      }
+    }
+
+    // 8. Spotify Search & Playback Intent
+    if (clean.includes("spotify")) {
+      const match = /(?:search|play)\s+(.+?)(?:\s+(?:on|in)\s+spotify|\s+spotify|$)/i.exec(promptText);
+      let q = match && match[1] ? match[1].replace(/^spotify\s*/i, "").replace(/\s*spotify$/i, "").trim() : "";
+      if (!q || q === "open" || q === "launch") q = "music";
+      if (clean === "open spotify" || clean === "launch spotify" || clean === "spotify") {
+        return { action: "open_app", target: "spotify", label: "opening spotify..." };
+      }
+      return {
+        action: "open_uri",
+        target: `spotify:search:${encodeURIComponent(q)}`,
+        label: `searching Spotify for '${q}'...`
+      };
+    }
+
+    // 9. YouTube Search & Playback Intent
+    if (clean.includes("youtube")) {
+      const match = /(?:search|play|watch)\s+(.+?)(?:\s+(?:on|in)\s+youtube|\s+youtube|$)/i.exec(promptText);
+      let q = match && match[1] ? match[1].replace(/^youtube\s*/i, "").replace(/\s*youtube$/i, "").trim() : "";
+      if (clean === "open youtube" || clean === "launch youtube" || clean === "youtube") {
+        return { action: "open_uri", target: "https://www.youtube.com", label: "opening youtube..." };
+      }
+      const url = q ? `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}` : "https://www.youtube.com";
+      return {
+        action: "open_uri",
+        target: url,
+        label: q ? `searching YouTube for '${q}'...` : "opening youtube..."
+      };
+    }
+
+    // 10. Developer Platform Searches (GitHub, StackOverflow, npm, PyPI)
+    if (clean.startsWith("search github for ") || clean.includes("on github")) {
+      const q = promptText.replace(/^(?:search\s+)?github\s*(?:for)?\s*/i, "").replace(/\s+on github$/i, "").trim();
+      return { action: "search_dev", target: `github|${q}`, label: `searching GitHub for '${q}'...` };
+    }
+    if (clean.startsWith("search stackoverflow for ") || clean.startsWith("search so for ") || clean.includes("on stackoverflow") || clean.includes("on so")) {
+      const q = promptText.replace(/^(?:search\s+)?(?:stackoverflow|so)\s*(?:for)?\s*/i, "").replace(/\s+on (?:stackoverflow|so)$/i, "").trim();
+      return { action: "search_dev", target: `stackoverflow|${q}`, label: `searching StackOverflow for '${q}'...` };
+    }
+    if (clean.startsWith("search npm for ") || clean.includes("on npm")) {
+      const q = promptText.replace(/^(?:search\s+)?npm\s*(?:for)?\s*/i, "").replace(/\s+on npm$/i, "").trim();
+      return { action: "search_dev", target: `npm|${q}`, label: `searching npm for '${q}'...` };
+    }
+    if (clean.startsWith("search pypi for ") || clean.includes("on pypi")) {
+      const q = promptText.replace(/^(?:search\s+)?pypi\s*(?:for)?\s*/i, "").replace(/\s+on pypi$/i, "").trim();
+      return { action: "search_dev", target: `pypi|${q}`, label: `searching PyPI for '${q}'...` };
+    }
+
+    // 11. Navigation & Local Info (Google Maps / Weather)
+    if (clean.startsWith("search maps for ") || clean.startsWith("directions to ") || clean.includes("on maps")) {
+      const q = promptText.replace(/^(?:search maps for|directions to)\s+/i, "").replace(/\s+on maps$/i, "").trim();
+      return { action: "search_web", target: `maps|${q}`, label: `searching Maps for '${q}'...` };
+    }
+    if (clean.startsWith("weather in ") || clean.startsWith("weather ") || clean.startsWith("forecast for ")) {
+      const q = promptText.replace(/^(?:weather in|weather|forecast for)\s+/i, "").trim();
+      return { action: "search_web", target: `weather|${q}`, label: `checking weather for '${q}'...` };
+    }
+
+    // 12. Alternative Web Search Engines (Bing / DuckDuckGo)
+    if (clean.startsWith("search bing for ") || clean.includes("on bing")) {
+      const q = promptText.replace(/^(?:search\s+)?bing\s*(?:for)?\s*/i, "").replace(/\s+on bing$/i, "").trim();
+      return { action: "search_web", target: `bing|${q}`, label: `searching Bing for '${q}'...` };
+    }
+    if (clean.startsWith("search duckduckgo for ") || clean.startsWith("search ddg for ") || clean.includes("on duckduckgo") || clean.includes("on ddg")) {
+      const q = promptText.replace(/^(?:search\s+)?(?:duckduckgo|ddg)\s*(?:for)?\s*/i, "").replace(/\s+on (?:duckduckgo|ddg)$/i, "").trim();
+      return { action: "search_web", target: `duckduckgo|${q}`, label: `searching DuckDuckGo for '${q}'...` };
+    }
+
+    // 13. General Google Web Search Intent
+    if (
+      clean.startsWith("search google for ") ||
+      clean.startsWith("seacrh google for ") ||
+      clean.includes("on google") ||
+      clean.startsWith("google ") ||
+      clean.startsWith("search web for ") ||
+      clean.startsWith("search ") ||
+      clean.startsWith("seacrh ")
+    ) {
+      const q = promptText
+        .replace(/^(?:search|seacrh)?\s*(?:google|web)?\s*(?:for)?\s*/i, "")
+        .replace(/\s+on google$/i, "")
+        .trim();
+      if (q) {
+        return { action: "search_web", target: `google|${q}`, label: `searching Google for '${q}'...` };
+      }
+    }
+
+    // 14. Power & Session Intent
+    if (clean.includes("lock pc") || clean.includes("lock computer") || clean.includes("lock workstation") || clean === "lock") {
+      return { action: "power_control", target: "lock", label: "locking workstation..." };
+    }
+    if (clean.includes("sleep pc") || clean.includes("put pc to sleep") || clean === "sleep") {
+      return { action: "power_control", target: "sleep", label: "putting pc to sleep..." };
+    }
+    if (clean.includes("restart pc") || clean.includes("reboot computer")) {
+      return { action: "power_control", target: "restart", label: "restarting computer..." };
+    }
+    if (clean.includes("shutdown pc") || clean.includes("turn off computer")) {
+      return { action: "power_control", target: "shutdown", label: "shutting down computer..." };
+    }
+
+    // 15. System Status & Hardware Telemetry Intent
+    if (clean.includes("system status") || clean.includes("hardware status") || clean.includes("battery status") || clean.includes("cpu usage") || clean.includes("ram usage")) {
+      return { action: "system_status", target: "report", label: "fetching system status..." };
+    }
+
+    // 16. Process Management Intent
+    if (clean.includes("list processes") || clean.includes("top processes") || clean.includes("running processes")) {
+      return { action: "process_control", target: "list|", label: "listing top processes..." };
+    }
+    if (clean.startsWith("kill process ") || clean.startsWith("kill app ")) {
+      const targetApp = clean.replace(/^(?:kill process|kill app)\s+/i, "").trim();
+      return { action: "process_control", target: `kill|${targetApp}`, label: `killing process ${targetApp}...` };
+    }
+    if (clean.startsWith("close ") || clean.startsWith("terminate ") || clean.startsWith("kill ")) {
+      const app = clean.replace(/^(?:close|terminate|kill)\s+/i, "").trim();
+      if (app && app !== "processes" && app !== "process" && app !== "active processes" && app !== "window" && app !== "pc" && app !== "computer") {
+        return {
+          action: "process_control",
+          target: `kill|${app}`,
+          label: `terminating process ${app}...`
+        };
+      }
+    }
+
+    // 17. Brightness Intent
+    if (clean.includes("brightness")) {
+      const numMatch = /\b([0-9]{1,3})\b/.exec(clean);
+      const level = numMatch ? parseInt(numMatch[1], 10) : 80;
+      return { action: "set_brightness", target: String(level), label: `adjusting brightness to ${level}%...` };
+    }
+
+    // 18. Volume Intent
+    if (clean.includes("volume")) {
+      const numMatch = /\b([0-9]{1,3})\b/.exec(clean);
+      const level = numMatch ? parseInt(numMatch[1], 10) : 50;
+      return { action: "set_volume", target: String(level), label: `adjusting volume to ${level}%...` };
+    }
+
+    // 19. Window Management Intent
+    if (clean === "minimize all" || clean === "show desktop" || clean === "toggle desktop") {
+      return { action: "window_management", target: "toggle_desktop", label: "toggling desktop..." };
+    }
+
+    // 20. Universal Application & Folder Launcher Intent
+    if (clean.startsWith("open ") || clean.startsWith("launch ") || clean.startsWith("start ")) {
+      const rawTarget = clean.replace(/^(?:open|launch|start)\s+/i, "").trim();
+      if (rawTarget) {
+        return { action: "open_app", target: rawTarget, label: `opening ${rawTarget}...` };
+      }
     }
 
     return null;
@@ -897,10 +1305,11 @@ function App() {
     }
   }
 
-  // 1. Listen for the global selection and silent screen capture events from Rust
+  // 1. Listen for the global selection, silent screen capture events, and timers from Rust
   useEffect(() => {
     let unlistenTextFn: (() => void) | null = null;
     let unlistenScreenFn: (() => void) | null = null;
+    let unlistenTimerFn: (() => void) | null = null;
 
     async function setupListeners() {
       // Listen for text selection capture
@@ -924,6 +1333,25 @@ function App() {
           playBeep(); // Beep to signal that the hidden capture succeeded!
         }
       });
+
+      // Listen for background timer finished event
+      unlistenTimerFn = await listen<{ id: string; label: string; duration_secs: number }>("timer-finished", (event) => {
+        const { id, label } = event.payload;
+        playBeep();
+
+        const finishMsg: Message = {
+          role: "assistant",
+          content: `⏰ **Timer Finished**: "${label}" is complete!`,
+          image_base64: null
+        };
+        setMessages((prev) => [...prev, finishMsg]);
+
+        // Narrate completion aloud if voice narration is active
+        speakText(`Timer ${label} is complete!`);
+
+        // Remove timer from the local React list
+        setActiveTimers((prev) => prev.filter((t) => t.id !== id));
+      });
     }
 
     setupListeners();
@@ -932,6 +1360,7 @@ function App() {
     return () => {
       if (unlistenTextFn) unlistenTextFn();
       if (unlistenScreenFn) unlistenScreenFn();
+      if (unlistenTimerFn) unlistenTimerFn();
     };
   }, []);
 
@@ -973,10 +1402,112 @@ function App() {
 
   // Submit trigger logic
   async function triggerSubmit(promptText: string) {
-    if (!promptText.trim()) return;
-
     stopSpeaking();
     setVoiceState("standby");
+
+    // Immediate execution for explicit user automation intent (Direct OS Actions)
+    const promptAction = parsePromptAutomationIntent(promptText);
+    if (promptAction) {
+      const userMsg: Message = {
+        role: "user",
+        content: promptText,
+        image_base64: attachedImage
+      };
+
+      // Handle lazy session creation if no session is active
+      let currentSid = activeSessionId;
+      if (!currentSid) {
+        const initialTitle = promptText.length > 20 ? promptText.slice(0, 20) + "..." : promptText;
+        try {
+          currentSid = await invoke<string>("db_create_session", { title: initialTitle });
+          const updatedSessions = await invoke<DbSession[]>("db_get_sessions");
+          setSessions(updatedSessions);
+          setActiveSessionId(currentSid);
+        } catch (err) {
+          console.error("Failed to create session on submit:", err);
+        }
+      }
+
+      // Sync user message to SQLite DB
+      if (currentSid) {
+        invoke("db_add_message", {
+          sessionId: currentSid,
+          role: "user",
+          content: promptText,
+          imageBase64: attachedImage,
+          provider: provider
+        }).catch(console.error);
+
+        const currentSession = sessions.find((s) => s.id === currentSid);
+        if (currentSession && (currentSession.title === "New Chat" || currentSession.title.trim() === "")) {
+          const shortTitle = promptText.length > 20 ? promptText.slice(0, 20) + "..." : promptText;
+          invoke("db_update_session_title", { id: currentSid, title: shortTitle }).catch(console.error);
+          setSessions((prev) =>
+            prev.map((s) => (s.id === currentSid ? { ...s, title: shortTitle } : s))
+          );
+        }
+      }
+
+      setMessages((prev) => [...prev, userMsg]);
+      setSelectedText("");
+      setAttachedImage(null);
+      setIsLoading(true);
+      setRunningCommand(`automation:${promptAction.action}`);
+
+      try {
+        const res = await invoke<string>("execute_os_automation", {
+          actionType: promptAction.action,
+          target: promptAction.target
+        });
+        playBeep();
+        triggerHappyBurst();
+
+        let responseContent = (res && res !== "Execution successful") ? res : `✓ ${promptAction.label.replace("...", "")}`;
+        
+        if (promptAction.action === "set_timer") {
+          try {
+            const timerData = JSON.parse(res);
+            setActiveTimers((prev) => [
+              ...prev,
+              {
+                id: timerData.id,
+                label: timerData.label,
+                duration_secs: timerData.duration_secs,
+                remaining_secs: timerData.duration_secs,
+              }
+            ]);
+            responseContent = `⏰ Timer set for ${timerData.duration_secs} seconds: "${timerData.label}"`;
+          } catch (e) {
+            console.error("Failed to parse timer JSON response:", e);
+          }
+        }
+
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: responseContent,
+          image_base64: null
+        };
+
+        setMessages((prev) => [...prev, assistantMsg]);
+
+        if (currentSid) {
+          invoke("db_add_message", {
+            sessionId: currentSid,
+            role: "assistant",
+            content: responseContent,
+            imageBase64: null,
+            provider: provider
+          }).catch(console.error);
+        }
+      } catch (err: any) {
+        const errMsg = `[OS Automation Failed]: ${err}`;
+        setMessages((prev) => [...prev, { role: "assistant", content: errMsg, image_base64: null }]);
+      } finally {
+        setIsLoading(false);
+        setRunningCommand(null);
+      }
+      return; // Return early: direct OS commands do not invoke LLM stream!
+    }
 
     // Create the clean bubble prompt shown on the screen, holding the picture if attached
     const userMsg: Message = {
@@ -1076,9 +1607,10 @@ function App() {
         }).catch(console.error);
       }
 
-      // Auto-copy response to clipboard if active
-      if (autoCopy && fullResponse.trim()) {
-        await invoke("write_clipboard", { text: fullResponse });
+      // Auto-execute OS desktop automation immediately if detected!
+      const autoAction = getRunnableAutomationAction(fullResponse);
+      if (autoAction) {
+        handleRunAutomation(autoAction.action, autoAction.target);
       }
 
       // Read response aloud if voice narration is active
@@ -1675,6 +2207,36 @@ function App() {
             </div>
           )}
 
+          {/* Active Timers List Drawer */}
+          {activeTimers.length > 0 && (
+            <div className="active-timers-container" style={{ margin: "8px 12px", padding: "8px", background: "rgba(0,0,0,0.2)", border: "1.5px solid var(--border-color)", borderRadius: "4px" }}>
+              <div style={{ fontSize: "0.68em", fontWeight: "bold", color: "var(--primary-color)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Active Timers</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                {activeTimers.map((t) => (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.75em", background: "rgba(255,255,255,0.05)", padding: "4px 8px", borderRadius: "3px", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span>⏰</span>
+                      <strong style={{ color: "var(--fg-main)" }}>{t.label}</strong>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontFamily: "monospace", color: "var(--primary-color)", fontWeight: "bold" }}>
+                        {Math.floor(t.remaining_secs / 60)}:{(t.remaining_secs % 60).toString().padStart(2, "0")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelTimer(t.id)}
+                        style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "0.9em", padding: 0 }}
+                        title="Cancel timer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Scrollable Chat Bubbles List */}
           <div className="chat-container">
             {messages.length === 0 ? (
@@ -1717,7 +2279,7 @@ function App() {
                                   disabled={runningCommand !== null}
                                   onClick={() => handleRunCommand(runnableCmd)}
                                 >
-                                  {runningCommand ? "EXECUTING COMMAND..." : `▶ RUN COMMAND: ${runnableCmd.length > 30 ? runnableCmd.substring(0, 30) + '...' : runnableCmd}`}
+                                  {runningCommand ? "executing command..." : `run command: ${runnableCmd.length > 30 ? runnableCmd.substring(0, 30) + '...' : runnableCmd}`}
                                 </button>
                               </div>
                             );
@@ -1732,7 +2294,7 @@ function App() {
                                   disabled={runningCommand !== null}
                                   onClick={() => handleRunAutomation(autoAction.action, autoAction.target)}
                                 >
-                                  {runningCommand === `automation:${autoAction.action}` ? "EXECUTING..." : autoAction.label}
+                                  {runningCommand === `automation:${autoAction.action}` ? "executing..." : autoAction.label}
                                 </button>
                               </div>
                             );
