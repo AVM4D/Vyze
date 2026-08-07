@@ -152,6 +152,12 @@ pub async fn open_app_or_folder(target: &str) -> Result<(), String> {
                     function Find-And-Start-App {{
                         param([string]$AppName)
                         
+                        # If the app name is already a valid absolute/relative path on disk, launch it directly!
+                        if (Test-Path $AppName) {{
+                            Start-Process $AppName
+                            return $true
+                        }}
+
                         $exeMap = @{{
                             "chrome" = "chrome.exe";
                             "google chrome" = "chrome.exe";
@@ -218,30 +224,42 @@ pub async fn open_app_or_folder(target: &str) -> Result<(), String> {
                             }}
                         }}
                         
-                        # Search common directories on all active logical drives
-                        $drives = Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Root
-                        $subPaths = @(
-                            "Program Files\Microsoft VS Code",
-                            "Program Files (x86)\Microsoft VS Code",
-                            "Program Files",
-                            "Program Files (x86)",
-                            "Users\*\AppData\Local\Programs\Microsoft VS Code",
-                            "Users\*\AppData\Local\JetBrains\Toolbox\apps",
-                            "Users\*\AppData\Local\Programs",
-                            "Users\*\AppData\Local",
-                            "Users\*\AppData\Roaming"
+                        # Registry Uninstall Check (looks up install paths on other drives)
+                        $uninstallPaths = @(
+                            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                            "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
                         )
-                        
+                        $installedApps = Get-ItemProperty -Path $uninstallPaths -ErrorAction SilentlyContinue | 
+                            Where-Object {{ `$_.DisplayName -and (`$_.DisplayName -match $AppName -or `$_.InstallLocation -match $AppName) }}
+                        foreach ($app in $installedApps) {{
+                            if ($app.DisplayIcon -and $app.DisplayIcon -match "\.exe") {{
+                                $path = $app.DisplayIcon.Split(',')[0].Replace('"', '').Trim()
+                                if (Test-Path $path) {{
+                                    Start-Process $path
+                                    return $true
+                                }}
+                            }}
+                            if ($app.InstallLocation -and (Test-Path $app.InstallLocation)) {{
+                                $found = Get-ChildItem -Path $app.InstallLocation -Filter $exeName -Recurse -Depth 3 -File -ErrorAction SilentlyContinue | Select-Object -First 1
+                                if ($found) {{
+                                    Start-Process $found.FullName
+                                    return $true
+                                }}
+                            }}
+                        }}
+
+                        # Search first-level directories on all filesystem drives (robust fallback search)
+                        $drives = Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Root
                         foreach ($drive in $drives) {{
-                            foreach ($subPath in $subPaths) {{
-                                $searchPattern = Join-Path $drive $subPath
-                                $matchedFolders = Resolve-Path $searchPattern -ErrorAction SilentlyContinue
-                                foreach ($folder in $matchedFolders) {{
-                                    $found = Get-ChildItem -Path $folder.Path -Filter $exeName -Recurse -Depth 4 -ErrorAction SilentlyContinue | Select-Object -First 1
-                                    if ($found) {{
-                                        Start-Process $found.FullName
-                                        return $true
-                                    }}
+                            $firstLevelDirs = Get-ChildItem -Path $drive -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+                            foreach ($dir in $firstLevelDirs) {{
+                                # Skip system folders to keep search very fast
+                                if ($dir -match "Recycle|Volume|Windows|System32") {{ continue }}
+                                $found = Get-ChildItem -Path $dir -Filter $exeName -Recurse -Depth 4 -File -ErrorAction SilentlyContinue | Select-Object -First 1
+                                if ($found) {{
+                                    Start-Process $found.FullName
+                                    return $true
                                 }}
                             }}
                         }}

@@ -486,18 +486,18 @@ function App() {
 
     // 2. WhatsApp Direct Intent
     if (clean.includes("whatsapp")) {
-      const callMatch = /(?:whatsapp call|call on whatsapp|call)\s+(\+?\d+)/i.exec(promptText);
+      const callMatch = /(?:whatsapp call|call on whatsapp|call)\s+([+\d\s()-.]{5,})/i.exec(promptText);
       if (callMatch) {
-        const phone = callMatch[1];
+        const phone = callMatch[1].replace(/[^\d]/g, "");
         return {
           action: "open_uri",
           target: `whatsapp://call?phone=${phone}`,
           label: `initiating WhatsApp call to ${phone}...`
         };
       }
-      const msgMatch = /(?:send\s+)?whatsapp\s*(?:message\s+to\s+)?(\+?\d+)\s*(?:saying|message|text)?\s*(.+)/i.exec(promptText);
+      const msgMatch = /(?:send\s+)?whatsapp\s*(?:message\s+)?(?:to\s+)?([+\d\s()-.]{5,})\s*(?:saying|message|text)?\s*(.+)/i.exec(promptText);
       if (msgMatch) {
-        const phone = msgMatch[1];
+        const phone = msgMatch[1].replace(/[^\d]/g, "");
         const text = encodeURIComponent(msgMatch[2].trim());
         return {
           action: "open_uri",
@@ -516,7 +516,7 @@ function App() {
         let subject = "Vyze Draft";
         let body = "";
         
-        const subjectMatch = /subject\s+([^body]+)/i.exec(promptText);
+        const subjectMatch = /subject\s+(.*?)(?:\s+body\s+|$)/i.exec(promptText);
         const bodyMatch = /body\s+(.+)/i.exec(promptText);
         const sayingMatch = /saying\s+(.+)/i.exec(promptText);
         
