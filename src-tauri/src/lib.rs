@@ -626,8 +626,16 @@ fn toggle_window(app: &tauri::AppHandle) {
                 }
             };
 
-            let win_width = 360;
-            let win_height = 280;
+            let (win_width, win_height) = if let Ok(outer_size) = window.outer_size() {
+                if let Ok(scale) = window.scale_factor() {
+                    let logical = outer_size.to_logical::<f64>(scale);
+                    (logical.width as i32, logical.height as i32)
+                } else {
+                    (outer_size.width as i32, outer_size.height as i32)
+                }
+            } else {
+                (460, 420)
+            };
             let mut monitor_x = 0;
             let mut monitor_y = 0;
             let mut monitor_width = 1920;
@@ -725,8 +733,16 @@ fn show_main_window(app: tauri::AppHandle) {
             }
         };
 
-        let win_width = 460;
-        let win_height = 420;
+        let (win_width, win_height) = if let Ok(outer_size) = window.outer_size() {
+            if let Ok(scale) = window.scale_factor() {
+                let logical = outer_size.to_logical::<f64>(scale);
+                (logical.width as i32, logical.height as i32)
+            } else {
+                (outer_size.width as i32, outer_size.height as i32)
+            }
+        } else {
+            (460, 420)
+        };
         let mut monitor_x = 0;
         let mut monitor_y = 0;
         let mut monitor_width = 1920;
@@ -1042,6 +1058,19 @@ fn delete_session_attachment(
         .map_err(|e| format!("Failed to delete document: {}", e))
 }
 
+#[tauri::command]
+fn resize_vyze_window(app: tauri::AppHandle, preset: String) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let (width, height) = match preset.to_lowercase().as_str() {
+            "medium" => (640.0, 540.0),
+            "large" => (820.0, 660.0),
+            _ => (460.0, 420.0), // "small" default
+        };
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(width, height)));
+    }
+    Ok(())
+}
+
 pub fn run() {
     dotenvy::dotenv().ok();
     tauri::Builder::default()
@@ -1072,7 +1101,8 @@ pub fn run() {
             select_and_attach_files,
             select_and_attach_folder,
             get_session_attachments,
-            delete_session_attachment
+            delete_session_attachment,
+            resize_vyze_window
         ])
         .setup(|app| {
             // Initialize Database Manager

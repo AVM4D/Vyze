@@ -144,21 +144,20 @@ html {
 .hud-container {
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   width: 100vw;
   height: 100vh;
-  padding-top: 110px;
-  padding-left: 10px;
-  padding-right: 10px;
-  padding-bottom: 10px;
+  padding: 24px 10px 10px 10px;
   box-sizing: border-box;
   overflow: visible;
   position: relative;
 }
 
 .hud-card {
-  width: 340px;
-  height: 260px;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   background-color: var(--bg-card);
   background-image: var(--card-bg-pattern);
   background-size: 10px 10px;
@@ -538,14 +537,18 @@ html {
 .prompt-area {
   display: flex;
   align-items: center;
+  gap: 3px;
   background: var(--bg-input);
   /* Dark Grape-black */
   border: 2px solid var(--border-color);
   border-radius: 4px;
-  padding: 2px 2px 2px 8px;
+  padding: 3px 4px 3px 6px;
   box-shadow: 3px 3px 0px var(--border-color);
   transition: box-shadow 0.15s, border-color 0.15s;
   margin-top: auto;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .prompt-area:focus-within {
@@ -554,16 +557,17 @@ html {
 }
 
 .prompt-input {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 50px;
   background: transparent;
   border: none;
   outline: none;
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 0.7em;
+  font-size: 0.72em;
   font-weight: 700;
   color: var(--input-text-color);
   /* Saturated Pink typing text! */
-  padding: 4px 0;
+  padding: 4px 2px;
   caret-color: var(--secondary-color);
   /* Sky Blue cursor */
 }
@@ -572,17 +576,25 @@ html {
   color: #64748b;
 }
 
+.upload-btn {
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
 .send-button {
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: 56px;
   background: var(--secondary-color);
   /* TV Girl Blue */
   border: 2px solid var(--border-color);
   box-shadow: 2px 2px 0px var(--border-color);
   border-radius: 3px;
-  color: var(--border-color);
+  color: var(--brand-color);
   cursor: pointer;
-  padding: 3px 8px;
+  padding: 4px 10px;
   margin-left: 4px;
-  font-size: 0.72em;
+  font-size: 0.75em;
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -1426,6 +1438,102 @@ html {
 .run-action-btn.automation-btn {
   background: #3b82f6 !important;
   color: #ffffff !important;
+}
+
+/* --- Window Size Preset Selector & Voice Options CSS --- */
+.preset-btn-group {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.preset-btn {
+  flex: 1;
+  background: var(--bg-input);
+  color: var(--text-color);
+  border: 1.5px solid var(--border-color);
+  border-radius: 3px;
+  padding: 4px 6px;
+  font-size: 0.7em;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 1.5px 1.5px 0px var(--border-color);
+  transition: all 0.1s ease;
+  text-transform: capitalize;
+}
+
+.preset-btn:hover {
+  border-color: var(--primary-color);
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2px 2px 0px var(--border-color);
+}
+
+.preset-btn.active {
+  background: var(--primary-color);
+  color: var(--brand-color);
+  border-color: var(--border-color);
+  box-shadow: 2px 2px 0px var(--border-color);
+  font-weight: 800;
+}
+
+.voice-controls-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1.5px solid var(--border-color);
+  border-radius: 4px;
+  padding: 8px;
+  margin-top: 4px;
+}
+
+.voice-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.voice-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font-size: 0.68em;
+  font-weight: 700;
+}
+
+.voice-range-slider {
+  flex: 1;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+.test-voice-btn {
+  background: var(--secondary-color);
+  color: var(--brand-color);
+  border: 1.5px solid var(--border-color);
+  box-shadow: 1.5px 1.5px 0px var(--border-color);
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 0.68em;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: transform 0.05s;
+  text-transform: uppercase;
+}
+
+.test-voice-btn:hover {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2px 2px 0px var(--border-color);
+}
+
+.test-voice-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 0.5px 0.5px 0px var(--border-color);
 }
 
 .run-action-btn:disabled {

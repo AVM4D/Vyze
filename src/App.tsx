@@ -184,10 +184,125 @@ function App() {
     return localStorage.getItem("vyze_enable_character_pet") !== "false";
   });
 
+  // Window Size Preset State (small: 460x420, medium: 640x540, large: 820x660)
+  const [windowSizePreset, setWindowSizePreset] = useState<"small" | "medium" | "large">(
+    () => (localStorage.getItem("vyze_window_size") as "small" | "medium" | "large") || "small"
+  );
+
+  useEffect(() => {
+    localStorage.setItem("vyze_window_size", windowSizePreset);
+    invoke("db_set_setting", { key: "window_size_preset", value: windowSizePreset }).catch(console.error);
+    invoke("resize_vyze_window", { preset: windowSizePreset }).catch(console.error);
+  }, [windowSizePreset]);
+
+  // Enhanced Voice Selection States
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceName, setSelectedVoiceName] = useState<string>(() => {
     return localStorage.getItem("vyze_tts_voice") || "";
   });
+  const [voiceGenderFilter, setVoiceGenderFilter] = useState<"all" | "male" | "female">(
+    () => (localStorage.getItem("vyze_voice_gender") as "all" | "male" | "female") || "all"
+  );
+  const [voicePitch, setVoicePitch] = useState<number>(() => {
+    return parseFloat(localStorage.getItem("vyze_voice_pitch") || "1.0");
+  });
+  const [voiceRate, setVoiceRate] = useState<number>(() => {
+    return parseFloat(localStorage.getItem("vyze_voice_rate") || "1.0");
+  });
+  const [voiceTonePreset, setVoiceTonePreset] = useState<string>(() => {
+    return localStorage.getItem("vyze_voice_tone") || "default";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("vyze_voice_gender", voiceGenderFilter);
+  }, [voiceGenderFilter]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_voice_pitch", String(voicePitch));
+    invoke("db_set_setting", { key: "voice_pitch", value: String(voicePitch) }).catch(console.error);
+  }, [voicePitch]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_voice_rate", String(voiceRate));
+    invoke("db_set_setting", { key: "voice_rate", value: String(voiceRate) }).catch(console.error);
+  }, [voiceRate]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_voice_tone", voiceTonePreset);
+  }, [voiceTonePreset]);
+
+  const detectVoiceGender = (voiceName: string): "male" | "female" | "other" => {
+    const lower = voiceName.toLowerCase();
+    if (
+      lower.includes("zira") || lower.includes("eva") || lower.includes("hazel") ||
+      lower.includes("samantha") || lower.includes("susan") || lower.includes("catherine") ||
+      lower.includes("victoria") || lower.includes("karen") || lower.includes("fiona") ||
+      lower.includes("heather") || lower.includes("jenny") || lower.includes("aria") ||
+      lower.includes("ava") || lower.includes("female")
+    ) {
+      return "female";
+    }
+    if (
+      lower.includes("david") || lower.includes("mark") || lower.includes("george") ||
+      lower.includes("richard") || lower.includes("james") || lower.includes("prabhat") ||
+      lower.includes("daniel") || lower.includes("alex") || lower.includes("fred") ||
+      lower.includes("guy") || lower.includes("brian") || lower.includes("steffan") ||
+      lower.includes("male")
+    ) {
+      return "male";
+    }
+    return "other";
+  };
+
+  const handleApplyTonePreset = (presetKey: string) => {
+    setVoiceTonePreset(presetKey);
+    switch (presetKey) {
+      case "male_deep":
+        setVoicePitch(0.75);
+        setVoiceRate(0.95);
+        break;
+      case "female_crisp":
+        setVoicePitch(1.25);
+        setVoiceRate(1.05);
+        break;
+      case "soft_narrator":
+        setVoicePitch(0.9);
+        setVoiceRate(0.9);
+        break;
+      case "cyberpunk":
+        setVoicePitch(0.8);
+        setVoiceRate(1.15);
+        break;
+      case "speed_reader":
+        setVoicePitch(1.0);
+        setVoiceRate(1.4);
+        break;
+      case "anime":
+        setVoicePitch(1.4);
+        setVoiceRate(1.1);
+        break;
+      case "default":
+      default:
+        setVoicePitch(1.0);
+        setVoiceRate(1.0);
+        break;
+    }
+  };
+
+  const handleTestVoicePreview = () => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const sampleText = "Hello! I am Vyze. Here is how your selected voice sounds.";
+    const utterance = new SpeechSynthesisUtterance(sampleText);
+    utterance.pitch = voicePitch;
+    utterance.rate = voiceRate;
+    const systemVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
+    if (selectedVoiceName) {
+      const v = systemVoices.find((sv) => sv.name === selectedVoiceName);
+      if (v) utterance.voice = v;
+    }
+    window.speechSynthesis.speak(utterance);
+  };
 
   // Populate system TTS voices on load and when voices change in OS
   useEffect(() => {
@@ -1137,7 +1252,8 @@ function App() {
     const utterance = new SpeechSynthesisUtterance(cleanText);
     activeUtteranceRef.current = utterance;
     utterance.volume = 1.0;
-    utterance.rate = 1.0;
+    utterance.rate = voiceRate;
+    utterance.pitch = voicePitch;
 
     // Find the voice selected by the user or fallback to system default
     const systemVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
@@ -2076,6 +2192,34 @@ function App() {
                   <span>Auto-copy AI responses to clipboard</span>
                 </label>
               </div>
+              {/* Window Size Preset Option */}
+              <div className="settings-option" style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px" }}>
+                <label className="select-setting-label">Vyze Window Size:</label>
+                <div className="preset-btn-group">
+                  <button
+                    type="button"
+                    className={`preset-btn ${windowSizePreset === "small" ? "active" : ""}`}
+                    onClick={() => setWindowSizePreset("small")}
+                  >
+                    Small
+                  </button>
+                  <button
+                    type="button"
+                    className={`preset-btn ${windowSizePreset === "medium" ? "active" : ""}`}
+                    onClick={() => setWindowSizePreset("medium")}
+                  >
+                    Medium
+                  </button>
+                  <button
+                    type="button"
+                    className={`preset-btn ${windowSizePreset === "large" ? "active" : ""}`}
+                    onClick={() => setWindowSizePreset("large")}
+                  >
+                    Large
+                  </button>
+                </div>
+              </div>
+
               <div className="settings-option">
                 <label className="checkbox-setting-label">
                   <input
@@ -2087,21 +2231,107 @@ function App() {
                   <span>Read AI responses out loud (Speech)</span>
                 </label>
               </div>
-              {voiceNarration && availableVoices.length > 0 && (
-                <div className="settings-option">
-                  <label className="select-setting-label">Voice Speaker:</label>
-                  <select
-                    className="theme-select"
-                    value={selectedVoiceName}
-                    onChange={(e) => setSelectedVoiceName(e.target.value)}
-                  >
-                    <option value="">(Default OS Voice)</option>
-                    {availableVoices.map((v) => (
-                      <option key={v.name} value={v.name}>
-                        {v.name} ({v.lang})
-                      </option>
-                    ))}
-                  </select>
+
+              {voiceNarration && (
+                <div className="voice-controls-container">
+                  <div className="voice-row">
+                    <label className="select-setting-label">Voice Category:</label>
+                    <select
+                      className="theme-select"
+                      value={voiceGenderFilter}
+                      onChange={(e) => setVoiceGenderFilter(e.target.value as "all" | "male" | "female")}
+                    >
+                      <option value="all">All Voices</option>
+                      <option value="male">Male Voices</option>
+                      <option value="female">Female Voices</option>
+                    </select>
+                  </div>
+
+                  <div className="voice-row">
+                    <label className="select-setting-label">Voice Speaker:</label>
+                    <select
+                      className="theme-select"
+                      value={selectedVoiceName}
+                      onChange={(e) => setSelectedVoiceName(e.target.value)}
+                    >
+                      <option value="">(Default OS Voice)</option>
+                      {availableVoices
+                        .filter((v) => {
+                          if (voiceGenderFilter === "all") return true;
+                          const g = detectVoiceGender(v.name);
+                          return g === voiceGenderFilter;
+                        })
+                        .map((v) => (
+                          <option key={v.name} value={v.name}>
+                            {v.name} ({v.lang})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="voice-row">
+                    <label className="select-setting-label">Voice Tone Profile:</label>
+                    <select
+                      className="theme-select"
+                      value={voiceTonePreset}
+                      onChange={(e) => handleApplyTonePreset(e.target.value)}
+                    >
+                      <option value="default">Default Natural</option>
+                      <option value="male_deep">Deep Male Tone</option>
+                      <option value="female_crisp">Crisp Female Tone</option>
+                      <option value="soft_narrator">Soft Narrator</option>
+                      <option value="cyberpunk">Cyberpunk Synth</option>
+                      <option value="speed_reader">Speed Reader</option>
+                      <option value="anime">Anime / High Pitch</option>
+                    </select>
+                  </div>
+
+                  <div className="voice-row">
+                    <div className="voice-slider-container">
+                      <span style={{ minWidth: "45px" }}>Pitch: {voicePitch.toFixed(2)}</span>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="1.5"
+                        step="0.05"
+                        className="voice-range-slider"
+                        value={voicePitch}
+                        onChange={(e) => {
+                          setVoicePitch(parseFloat(e.target.value));
+                          setVoiceTonePreset("custom");
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="voice-row">
+                    <div className="voice-slider-container">
+                      <span style={{ minWidth: "45px" }}>Speed: {voiceRate.toFixed(2)}x</span>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.05"
+                        className="voice-range-slider"
+                        value={voiceRate}
+                        onChange={(e) => {
+                          setVoiceRate(parseFloat(e.target.value));
+                          setVoiceTonePreset("custom");
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="voice-row" style={{ justifyContent: "flex-end", marginTop: "2px" }}>
+                    <button
+                      type="button"
+                      className="test-voice-btn"
+                      onClick={handleTestVoicePreview}
+                      title="Test current voice speech settings"
+                    >
+                      🔊 Test Voice
+                    </button>
+                  </div>
                 </div>
               )}
               <div className="settings-option">
