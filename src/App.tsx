@@ -211,6 +211,18 @@ function App() {
   const [enableCharacterPet, setEnableCharacterPet] = useState<boolean>(() => {
     return localStorage.getItem("vyze_enable_character_pet") !== "false";
   });
+  const [autostartEnabled, setAutostartEnabled] = useState<boolean>(false);
+
+  useEffect(() => {
+    invoke<boolean>("get_autostart")
+      .then((val) => setAutostartEnabled(val))
+      .catch(console.error);
+  }, []);
+
+  const handleToggleAutostart = (enabled: boolean) => {
+    setAutostartEnabled(enabled);
+    invoke("set_autostart", { enabled }).catch(console.error);
+  };
 
   // Window Size Preset State (small: 460x420, medium: 640x540, large: 820x660)
   const [windowSizePreset, setWindowSizePreset] = useState<"small" | "medium" | "large">(
@@ -2354,6 +2366,17 @@ function App() {
                   onChange={(e) => setVoiceRate(parseFloat(e.target.value))}
                   style={{ width: "130px" }}
                 />
+              </div>
+              <div className="settings-option">
+                <label className="checkbox-setting-label">
+                  <input
+                    type="checkbox"
+                    className="setting-checkbox"
+                    checked={autostartEnabled}
+                    onChange={(e) => handleToggleAutostart(e.target.checked)}
+                  />
+                  <span>Start Vyze on Windows boot</span>
+                </label>
               </div>
               <div className="settings-option">
                 <label className="checkbox-setting-label">

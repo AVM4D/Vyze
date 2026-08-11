@@ -37,6 +37,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1.8", features = ["v4", "serde"] }
 cpal = "0.15"
 urlencoding = "2.1"
+winreg = "0.52"
 
 
 

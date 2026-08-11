@@ -37,6 +37,39 @@ pub struct AppState {
 }
 
 // command to toggle the auto_capture state in AppState
+use winreg::enums::*;
+use winreg::RegKey;
+
+#[tauri::command]
+fn set_autostart(enabled: bool) -> Result<(), String> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let path = r"Software\Microsoft\Windows\CurrentVersion\Run";
+    let (key, _) = hkcu.create_subkey(path).map_err(|e| format!("Registry error: {}", e))?;
+
+    if enabled {
+        if let Ok(current_exe) = std::env::current_exe() {
+            let exe_str = current_exe.to_string_lossy().to_string();
+            key.set_value("Vyze", &format!("\"{}\"", exe_str))
+                .map_err(|e| format!("Failed to set registry value: {}", e))?;
+        }
+    } else {
+        let _ = key.delete_value("Vyze");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_autostart() -> Result<bool, String> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let path = r"Software\Microsoft\Windows\CurrentVersion\Run";
+    if let Ok(key) = hkcu.open_subkey(path) {
+        let val: Result<String, _> = key.get_value("Vyze");
+        Ok(val.is_ok())
+    } else {
+        Ok(false)
+    }
+}
+
 #[tauri::command]
 fn set_auto_capture(state: tauri::State<'_, AppState>, enabled: bool) {
     if let Ok(mut auto_cap) = state.auto_capture.lock() {
@@ -1074,7 +1107,9 @@ pub fn run() {
             get_session_attachments,
             delete_session_attachment,
             resize_vyze_window,
-            cancel_ai_stream
+            cancel_ai_stream,
+            set_autostart,
+            get_autostart
         ])
         .setup(|app| {
             // Initialize Database Manager
