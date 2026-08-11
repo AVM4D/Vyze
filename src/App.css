@@ -38,6 +38,55 @@
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
 }
 
+/* --- Preset Dynamic Component & Typography Scaling --- */
+.hud-container.preset-small {
+  font-size: 14.5px;
+  --title-font-size: 0.88em;
+  --bubble-font-size: 0.78em;
+  --input-font-size: 0.78em;
+  --btn-font-size: 0.78em;
+  --icon-size: 15px;
+  --btn-padding: 3.5px 8px;
+  --header-padding: 2px 6px;
+  --container-pt: 90px;
+  --pet-size: 130px;
+  --pet-top: -10px;
+  --pet-right: -10px;
+  --chat-gap: 6px;
+}
+
+.hud-container.preset-medium {
+  font-size: 17px;
+  --title-font-size: 0.95em;
+  --bubble-font-size: 0.82em;
+  --input-font-size: 0.82em;
+  --btn-font-size: 0.82em;
+  --icon-size: 18px;
+  --btn-padding: 5px 10px;
+  --header-padding: 3px 8px;
+  --container-pt: 120px;
+  --pet-size: 190px;
+  --pet-top: -25px;
+  --pet-right: -20px;
+  --chat-gap: 8px;
+}
+
+.hud-container.preset-large {
+  font-size: 22px;
+  --title-font-size: 1.1em;
+  --bubble-font-size: 0.9em;
+  --input-font-size: 0.9em;
+  --btn-font-size: 0.9em;
+  --icon-size: 23px;
+  --btn-padding: 6px 12px;
+  --header-padding: 4px 10px;
+  --container-pt: 155px;
+  --pet-size: 240px;
+  --pet-top: -30px;
+  --pet-right: -20px;
+  --chat-gap: 12px;
+}
+
 .hud-container.theme-cyberpunk {
   --primary-color: #00f0ff;
   /* Cyan */
@@ -143,11 +192,15 @@ html {
 /* --- Container & Main Card (TV Girl Album Sleeve Chassis) --- */
 .hud-container {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: flex-end;
   align-items: center;
   width: 100vw;
   height: 100vh;
-  padding: 24px 10px 10px 10px;
+  padding-top: var(--container-pt, 45px);
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-bottom: 10px;
   box-sizing: border-box;
   overflow: visible;
   position: relative;
@@ -196,22 +249,45 @@ html {
   cursor: grab;
 }
 
-.hud-header:active {
-  cursor: grabbing;
+.sidebar-toggle-btn,
+.settings-toggle-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 2px 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-color);
+  font-size: var(--btn-font-size, 0.75em);
+  transition: transform 0.05s;
+}
+
+.sidebar-toggle-btn:hover,
+.settings-toggle-btn:hover {
+  transform: scale(1.15);
+}
+
+.header-btn-icon {
+  width: var(--icon-size, 15px);
+  height: var(--icon-size, 15px);
+  transition: width 0.15s, height 0.15s;
 }
 
 /* --- Animated Character Pet Sprite Widget --- */
 .character-pet-container {
   position: absolute;
-  top: -5px;
-  right: 25px;
-  height: 145px;
-  width: 145px;
+  top: var(--pet-top, -5px);
+  right: var(--pet-right, 25px);
+  height: var(--pet-size, 135px);
+  width: var(--pet-size, 135px);
   pointer-events: none;
   z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
 }
 
 .character-pet-sprite {
@@ -221,18 +297,14 @@ html {
   filter: drop-shadow(2px 3px 0px rgba(0, 0, 0, 0.75));
 }
 
-/* Diagonal Stripes (Magenta and Sky Blue) */
-.hud-header::before {
-  content: "";
-  width: 15px;
-  height: 10px;
-  background: repeating-linear-gradient(-45deg,
-      var(--secondary-color),
-      var(--secondary-color) 3px,
-      var(--primary-color) 3px,
-      var(--primary-color) 6px);
-  border: 1px solid var(--border-color);
-  border-radius: 1px;
+.hud-theme-logo-img {
+  height: var(--icon-size, 16px);
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+  margin-right: 4px;
+  user-select: none;
+  pointer-events: none;
 }
 
 .hud-brand {
@@ -242,7 +314,7 @@ html {
 
 .hud-title {
   font-weight: 800;
-  font-size: 0.85em;
+  font-size: var(--title-font-size, 0.85em);
   color: var(--brand-color);
   letter-spacing: 1.5px;
   text-transform: uppercase;
@@ -271,13 +343,16 @@ html {
   border-radius: 4px;
   padding: 1px 4px;
   font-family: var(--font-family);
-  font-size: 0.65em;
+  font-size: var(--btn-font-size, 0.7em);
   font-weight: 800;
   color: var(--brand-color);
   outline: none;
   cursor: pointer;
   box-shadow: 2px 2px 0px var(--border-color);
   transition: transform 0.05s, box-shadow 0.05s;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .provider-select:hover {
@@ -296,7 +371,7 @@ html {
   align-items: center;
   gap: 5px;
   cursor: pointer;
-  font-size: 0.68em;
+  font-size: var(--btn-font-size, 0.7em);
   font-weight: 800;
   color: var(--text-color);
   user-select: none;
@@ -444,7 +519,7 @@ html {
   position: relative;
   max-width: 88%;
   padding: 6px 10px;
-  font-size: 0.7em;
+  font-size: var(--bubble-font-size, 0.7em);
   line-height: 1.35;
   word-wrap: break-word;
   word-break: break-word;
@@ -563,7 +638,7 @@ html {
   border: none;
   outline: none;
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 0.72em;
+  font-size: var(--input-font-size, 0.72em);
   font-weight: 700;
   color: var(--input-text-color);
   /* Saturated Pink typing text! */
@@ -584,7 +659,7 @@ html {
 .send-button {
   flex-shrink: 0;
   white-space: nowrap;
-  min-width: 56px;
+  min-width: 50px;
   background: var(--secondary-color);
   /* TV Girl Blue */
   border: 2px solid var(--border-color);
@@ -592,9 +667,9 @@ html {
   border-radius: 3px;
   color: var(--brand-color);
   cursor: pointer;
-  padding: 4px 10px;
+  padding: var(--btn-padding, 4px 10px);
   margin-left: 4px;
-  font-size: 0.75em;
+  font-size: var(--btn-font-size, 0.75em);
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -941,6 +1016,7 @@ html {
   width: 100%;
   max-height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--bg-card);
   border: var(--border-width) solid var(--border-color);
   box-shadow: 4px 4px 0px var(--shadow-color);
@@ -950,6 +1026,20 @@ html {
   flex-direction: column;
   gap: 8px;
   box-sizing: border-box;
+}
+
+.settings-card::-webkit-scrollbar {
+  width: 3px;
+  height: 0px;
+}
+
+.settings-card::-webkit-scrollbar-thumb {
+  background: var(--primary-color);
+  border-radius: 2px;
+}
+
+.settings-card::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .custom-instructions-group {
@@ -984,7 +1074,7 @@ html {
 
 .settings-title {
   margin: 0 0 2px 0;
-  font-size: 0.8em;
+  font-size: var(--title-font-size, 0.85em);
   font-weight: 800;
   color: var(--primary-color);
   letter-spacing: 1.5px;
@@ -997,7 +1087,7 @@ html {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.68em;
+  font-size: var(--btn-font-size, 0.7em);
   font-weight: 800;
 }
 
@@ -1485,6 +1575,9 @@ html {
   border-radius: 4px;
   padding: 8px;
   margin-top: 4px;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .voice-row {
@@ -1492,6 +1585,44 @@ html {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.theme-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  background: var(--bg-input);
+  color: var(--text-color);
+  border: 1.5px solid var(--border-color);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-family: var(--font-family);
+  font-size: var(--btn-font-size, 0.72em);
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.theme-select option {
+  background-color: #161619 !important;
+  color: #ffffff !important;
+  font-family: var(--font-family);
+  font-size: 0.85em;
+  padding: 4px;
+}
+
+.theme-select optgroup {
+  background-color: #161619 !important;
+  color: var(--primary-color) !important;
+  font-family: var(--font-family);
+  font-weight: 800;
 }
 
 .voice-slider-container {
@@ -1515,13 +1646,15 @@ html {
   border: 1.5px solid var(--border-color);
   box-shadow: 1.5px 1.5px 0px var(--border-color);
   border-radius: 3px;
-  padding: 3px 8px;
-  font-size: 0.68em;
+  padding: 3.5px 10px;
+  font-family: var(--font-family);
+  font-size: var(--btn-font-size, 0.72em);
   font-weight: 800;
+  letter-spacing: 0.8px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   transition: transform 0.05s;
   text-transform: uppercase;
 }
@@ -1542,4 +1675,98 @@ html {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+/* --- Unified Attachment Popover Menu (TV Girl Neobrutalist Theme) --- */
+.attach-menu-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.attach-toggle-btn {
+  background: var(--primary-color);
+  border: 1.5px solid var(--border-color);
+  box-shadow: 1.5px 1.5px 0px var(--border-color);
+  border-radius: 3px;
+  color: var(--brand-color);
+  cursor: pointer;
+  padding: 3px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.05s, background-color 0.15s;
+}
+
+.attach-toggle-btn:hover,
+.attach-toggle-btn.active {
+  transform: translate(-0.5px, -0.5px);
+  box-shadow: 2px 2px 0px var(--border-color);
+  background: var(--secondary-color);
+}
+
+.attach-icon {
+  width: var(--icon-size, 14px);
+  height: var(--icon-size, 14px);
+  transition: transform 0.15s;
+}
+
+.attach-toggle-btn.active .attach-icon {
+  transform: rotate(45deg);
+}
+
+.attach-popover-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 6px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-color);
+  box-shadow: 4px 4px 0px var(--shadow-color);
+  border-radius: 4px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  z-index: 200;
+  min-width: 175px;
+  animation: popIn 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.attach-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--bg-input);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-family: var(--font-family);
+  font-size: var(--btn-font-size, 0.72em);
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  box-sizing: border-box;
+  transition: background 0.1s, color 0.1s;
+}
+
+.attach-menu-item:hover {
+  background: var(--primary-color);
+  color: var(--brand-color);
+}
+
+.attach-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-input);
+  color: var(--text-color);
+}
+
+.menu-item-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }

@@ -49,6 +49,13 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+pub static CANCEL_AI_STREAM: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+fn cancel_ai_stream() {
+    CANCEL_AI_STREAM.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
 // Our new streaming AI command.
 // - prompt: The message typed by the user.
 // - provider: Either "gemini" or "ollama".
@@ -61,6 +68,7 @@ async fn ask_vyze(
     provider: String,
     on_token: Channel<String>,
 ) -> Result<(), String> {
+    CANCEL_AI_STREAM.store(false, std::sync::atomic::Ordering::SeqCst);
     // Sanitize chat history to prevent corrupted automation debug strings from polluting model context
     history.retain(|msg| {
         let content = msg.content.trim();
@@ -259,6 +267,9 @@ async fn ask_vyze(
     let mut stream = ai_provider.stream_chat(&history); // Pass history instead of a single prompt
                                                         // 3. Listen to the stream and push tokens to the frontend channel as they arrive
     while let Some(result) = stream.next().await {
+        if CANCEL_AI_STREAM.load(std::sync::atomic::Ordering::SeqCst) {
+            break;
+        }
         match result {
             Ok(token) => {
                 // Send the token through the channel.
@@ -607,87 +618,118 @@ async fn capture_active_screen(window: tauri::WebviewWindow) -> Result<String, S
     result
 }
 
+fn position_window_at_cursor(window: &tauri::WebviewWindow) {
+    let mut point = POINT { x: 0, y: 0 };
+    let (cursor_x, cursor_y) = unsafe {
+        if GetCursorPos(&mut point).is_ok() {
+            (point.x, point.y)
+        } else {
+            (100, 100)
+        }
+    };
+
+    // 1. Intersect cursor point with all available physical monitors
+    let mut monitor_x = 0;
+    let mut monitor_y = 0;
+    let mut monitor_width = 1920;
+    let mut monitor_height = 1080;
+    let mut found_monitor = false;
+
+    if let Ok(monitors) = window.available_monitors() {
+        for m in monitors {
+            let pos = m.position();
+            let size = m.size();
+            let m_left = pos.x;
+            let m_top = pos.y;
+            let m_right = pos.x + size.width as i32;
+            let m_bottom = pos.y + size.height as i32;
+
+            if cursor_x >= m_left && cursor_x < m_right && cursor_y >= m_top && cursor_y < m_bottom {
+                monitor_x = m_left;
+                monitor_y = m_top;
+                monitor_width = size.width as i32;
+                monitor_height = size.height as i32;
+                found_monitor = true;
+                break;
+            }
+        }
+    }
+
+    if !found_monitor {
+        if let Ok(Some(m)) = window.current_monitor() {
+            let pos = m.position();
+            let size = m.size();
+            monitor_x = pos.x;
+            monitor_y = pos.y;
+            monitor_width = size.width as i32;
+            monitor_height = size.height as i32;
+        }
+    }
+
+    let (win_width, win_height) = if let Ok(outer_size) = window.outer_size() {
+        if outer_size.width > 50 && outer_size.height > 50 {
+            (outer_size.width as i32, outer_size.height as i32)
+        } else {
+            (400, 372)
+        }
+    } else {
+        (400, 372)
+    };
+
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+
+    // Determine the transparent top headroom padding in logical pixels based on preset window height
+    let top_padding_logical = if win_height > 560 {
+        155.0 // Large preset headroom
+    } else if win_height > 420 {
+        120.0 // Medium preset headroom
+    } else {
+        90.0 // Small preset headroom
+    };
+
+    let top_padding_physical = (top_padding_logical * scale_factor) as i32;
+
+    // Position window so the TOP-LEFT of the visible .hud-card aligns directly at cursor_y
+    let mut final_x = cursor_x;
+    let mut final_y = cursor_y - top_padding_physical;
+
+    // Clamp right and bottom edges relative to target monitor
+    if final_x + win_width > monitor_x + monitor_width {
+        final_x = cursor_x - win_width;
+    }
+    if final_y + win_height > monitor_y + monitor_height {
+        final_y = cursor_y - win_height;
+    }
+
+    // Ensure window never overflows left or top monitor bounds
+    if final_x < monitor_x {
+        final_x = monitor_x + 5;
+    }
+    if final_y < monitor_y - top_padding_physical {
+        final_y = monitor_y - top_padding_physical;
+    }
+
+    let _ = window.set_skip_taskbar(true);
+    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
+        final_x, final_y,
+    )));
+    let _ = window.show();
+    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
+        final_x, final_y,
+    )));
+    let _ = window.set_skip_taskbar(true);
+    let _ = window.set_focus();
+}
+
 fn toggle_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let is_visible = window.is_visible().unwrap_or(false);
         if is_visible {
-            window.hide().unwrap();
+            let _ = window.hide();
         } else {
             let window_clone = window.clone();
             let app_handle = app.clone();
 
-            // Calculate cursor coordinates
-            let mut point = POINT { x: 0, y: 0 };
-            let (cursor_x, cursor_y) = unsafe {
-                if GetCursorPos(&mut point).is_ok() {
-                    (point.x, point.y)
-                } else {
-                    (100, 100)
-                }
-            };
-
-            let (win_width, win_height) = if let Ok(outer_size) = window.outer_size() {
-                if let Ok(scale) = window.scale_factor() {
-                    let logical = outer_size.to_logical::<f64>(scale);
-                    (logical.width as i32, logical.height as i32)
-                } else {
-                    (outer_size.width as i32, outer_size.height as i32)
-                }
-            } else {
-                (460, 420)
-            };
-            let mut monitor_x = 0;
-            let mut monitor_y = 0;
-            let mut monitor_width = 1920;
-            let mut monitor_height = 1080;
-
-            if let Ok(monitors) = app.available_monitors() {
-                for m in monitors {
-                    let pos = m.position();
-                    let size = m.size();
-                    if cursor_x >= pos.x
-                        && cursor_x <= pos.x + size.width as i32
-                        && cursor_y >= pos.y
-                        && cursor_y <= pos.y + size.height as i32
-                    {
-                        monitor_x = pos.x;
-                        monitor_y = pos.y;
-                        monitor_width = size.width as i32;
-                        monitor_height = size.height as i32;
-                        break;
-                    }
-                }
-            } else if let Ok(Some(monitor)) = window.current_monitor() {
-                let pos = monitor.position();
-                let size = monitor.size();
-                monitor_x = pos.x;
-                monitor_y = pos.y;
-                monitor_width = size.width as i32;
-                monitor_height = size.height as i32;
-            }
-
-            let mut final_x = cursor_x + 12;
-            let mut final_y = cursor_y + 12;
-
-            if final_x + win_width > monitor_x + monitor_width {
-                final_x = cursor_x - win_width - 12;
-            }
-            if final_y + win_height > monitor_y + monitor_height {
-                final_y = cursor_y - win_height - 12;
-            }
-
-            if final_x < monitor_x {
-                final_x = monitor_x + 10;
-            }
-            if final_y < monitor_y {
-                final_y = monitor_y + 10;
-            }
-
-            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-                final_x, final_y,
-            )));
-
-            // Silent capture on wake logic
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<AppState>();
                 let auto_capture_enabled = if let Ok(auto_cap) = state.auto_capture.lock() {
@@ -700,15 +742,12 @@ fn toggle_window(app: &tauri::AppHandle) {
 
                 let mut screen_capture_base64 = None;
                 if auto_capture_enabled {
-                    // Capture while window is completely hidden
                     if let Ok(base64) = perform_screen_capture().await {
                         screen_capture_base64 = Some(base64);
                     }
                 }
 
-                // Show window only after capture is finished
-                let _ = window_clone.show();
-                let _ = window_clone.set_focus();
+                position_window_at_cursor(&window_clone);
                 let _ = window_clone.emit("selection-captured", selected_text);
                 if let Some(base64) = screen_capture_base64 {
                     let _ = window_clone.emit("auto-screen-captured", base64);
@@ -724,89 +763,20 @@ fn show_main_window(app: tauri::AppHandle) {
         let window_clone = window.clone();
         let app_handle = app.clone();
 
-        let mut point = POINT { x: 0, y: 0 };
-        let (cursor_x, cursor_y) = unsafe {
-            if GetCursorPos(&mut point).is_ok() {
-                (point.x, point.y)
-            } else {
-                (100, 100)
-            }
-        };
-
-        let (win_width, win_height) = if let Ok(outer_size) = window.outer_size() {
-            if let Ok(scale) = window.scale_factor() {
-                let logical = outer_size.to_logical::<f64>(scale);
-                (logical.width as i32, logical.height as i32)
-            } else {
-                (outer_size.width as i32, outer_size.height as i32)
-            }
-        } else {
-            (460, 420)
-        };
-        let mut monitor_x = 0;
-        let mut monitor_y = 0;
-        let mut monitor_width = 1920;
-        let mut monitor_height = 1080;
-
-        if let Ok(monitors) = app.available_monitors() {
-            for m in monitors {
-                let pos = m.position();
-                let size = m.size();
-                if cursor_x >= pos.x
-                    && cursor_x <= pos.x + size.width as i32
-                    && cursor_y >= pos.y
-                    && cursor_y <= pos.y + size.height as i32
-                {
-                    monitor_x = pos.x;
-                    monitor_y = pos.y;
-                    monitor_width = size.width as i32;
-                    monitor_height = size.height as i32;
-                    break;
-                }
-            }
-        }
-
-        let mut final_x = cursor_x + 12;
-        let mut final_y = cursor_y + 12;
-
-        if final_x + win_width > monitor_x + monitor_width {
-            final_x = cursor_x - win_width - 12;
-        }
-        if final_y + win_height > monitor_y + monitor_height {
-            final_y = cursor_y - win_height - 12;
-        }
-
-        if final_x < monitor_x {
-            final_x = monitor_x + 10;
-        }
-        if final_y < monitor_y {
-            final_y = monitor_y + 10;
-        }
-
-        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-            final_x, final_y,
-        )));
-
         tauri::async_runtime::spawn(async move {
             let state = app_handle.state::<AppState>();
-            let auto_capture_enabled = if let Ok(auto_cap) = state.auto_capture.lock() {
-                *auto_cap
-            } else {
-                false
+            let auto_cap = {
+                let guard = state.auto_capture.lock().unwrap();
+                *guard
             };
 
-            let selected_text = perform_capture().await;
+            let screen_capture_base64 = if auto_cap {
+                perform_screen_capture().await.ok()
+            } else {
+                None
+            };
 
-            let mut screen_capture_base64 = None;
-            if auto_capture_enabled {
-                if let Ok(base64) = perform_screen_capture().await {
-                    screen_capture_base64 = Some(base64);
-                }
-            }
-
-            let _ = window_clone.show();
-            let _ = window_clone.set_focus();
-            let _ = window_clone.emit("selection-captured", selected_text);
+            position_window_at_cursor(&window_clone);
             if let Some(base64) = screen_capture_base64 {
                 let _ = window_clone.emit("auto-screen-captured", base64);
             }
@@ -1062,11 +1032,12 @@ fn delete_session_attachment(
 fn resize_vyze_window(app: tauri::AppHandle, preset: String) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         let (width, height) = match preset.to_lowercase().as_str() {
-            "medium" => (640.0, 540.0),
-            "large" => (820.0, 660.0),
-            _ => (460.0, 420.0), // "small" default
+            "medium" => (540.0, 503.0),
+            "large" => (700.0, 622.0),
+            _ => (400.0, 372.0), // "small" default
         };
         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(width, height)));
+        let _ = window.set_skip_taskbar(true);
     }
     Ok(())
 }
@@ -1102,7 +1073,8 @@ pub fn run() {
             select_and_attach_folder,
             get_session_attachments,
             delete_session_attachment,
-            resize_vyze_window
+            resize_vyze_window,
+            cancel_ai_stream
         ])
         .setup(|app| {
             // Initialize Database Manager
@@ -1121,6 +1093,10 @@ pub fn run() {
                 audio_recorder: std::sync::Mutex::new(audio::AudioRecorder::new()),
                 active_timers: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
+
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_skip_taskbar(true);
+            }
 
             // 1. System Tray setup
             let toggle = MenuItemBuilder::with_id("toggle", "Toggle Vyze").build(app)?;

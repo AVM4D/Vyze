@@ -29,6 +29,19 @@ import speak1 from "./assets/character/speak1.png";
 import speak2 from "./assets/character/speak2.png";
 import speak3 from "./assets/character/speak3.png";
 
+// Import Theme Logos
+import logoPink from "./assets/pink.png";
+import logoCyan from "./assets/cyan.png";
+import logoPurple from "./assets/purple.png";
+import logoGrey from "./assets/grey.png";
+
+const themeLogos: Record<string, string> = {
+  "retro-pink": logoPink,
+  cyberpunk: logoCyan,
+  dracula: logoPurple,
+  monochrome: logoGrey,
+};
+
 import think1 from "./assets/character/think1.png";
 import think2 from "./assets/character/think2.png";
 import think3 from "./assets/character/think3.png";
@@ -44,6 +57,20 @@ const characterSprites: Record<string, string[]> = {
 };
 
 type CharacterMood = "idle" | "happy" | "think" | "speak" | "listen" | "alert" | "sleepy";
+
+interface PopularSpeaker {
+  id: string;
+  name: string;
+  lang: string;
+  keyword: string;
+  defaultPitch: number;
+}
+
+const POPULAR_SPEAKERS: PopularSpeaker[] = [
+  { id: "david", name: "Microsoft David (Male US)", lang: "en-US", keyword: "david", defaultPitch: 0.85 },
+  { id: "zira", name: "Microsoft Zira (Female US)", lang: "en-US", keyword: "zira", defaultPitch: 1.25 },
+  { id: "mark", name: "Microsoft Mark (Male US)", lang: "en-US", keyword: "mark", defaultPitch: 0.90 },
+];
 
 function CharacterPet({ mood }: { mood: CharacterMood }) {
   const [frameIdx, setFrameIdx] = useState(0);
@@ -174,6 +201,7 @@ function App() {
   // Session Documents RAG state variables
   const [sessionAttachments, setSessionAttachments] = useState<any[]>([]);
   const [ragProgress, setRagProgress] = useState<any>(null);
+  const isStreamingAbortedRef = useRef<boolean>(false);
   const activeSessionIdRef = useRef(activeSessionId);
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -200,22 +228,48 @@ function App() {
   const [selectedVoiceName, setSelectedVoiceName] = useState<string>(() => {
     return localStorage.getItem("vyze_tts_voice") || "";
   });
-  const [voiceGenderFilter, setVoiceGenderFilter] = useState<"all" | "male" | "female">(
-    () => (localStorage.getItem("vyze_voice_gender") as "all" | "male" | "female") || "all"
-  );
   const [voicePitch, setVoicePitch] = useState<number>(() => {
     return parseFloat(localStorage.getItem("vyze_voice_pitch") || "1.0");
   });
   const [voiceRate, setVoiceRate] = useState<number>(() => {
     return parseFloat(localStorage.getItem("vyze_voice_rate") || "1.0");
   });
-  const [voiceTonePreset, setVoiceTonePreset] = useState<string>(() => {
-    return localStorage.getItem("vyze_voice_tone") || "default";
-  });
+
+  // Unified Attachment Popover Menu State
+  const attachMenuRef = useRef<HTMLDivElement>(null);
+  const [showAttachMenu, setShowAttachMenu] = useState<boolean>(false);
 
   useEffect(() => {
-    localStorage.setItem("vyze_voice_gender", voiceGenderFilter);
-  }, [voiceGenderFilter]);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(event.target as Node)) {
+        setShowAttachMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Warm up system voices inventory on boot & load available voices into state
+  useEffect(() => {
+    const loadVoices = () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          setAvailableVoices(voices);
+        }
+      }
+    };
+
+    loadVoices();
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_tts_voice", selectedVoiceName);
+    invoke("db_set_setting", { key: "tts_voice", value: selectedVoiceName }).catch(console.error);
+  }, [selectedVoiceName]);
 
   useEffect(() => {
     localStorage.setItem("vyze_voice_pitch", String(voicePitch));
@@ -227,80 +281,33 @@ function App() {
     invoke("db_set_setting", { key: "voice_rate", value: String(voiceRate) }).catch(console.error);
   }, [voiceRate]);
 
-  useEffect(() => {
-    localStorage.setItem("vyze_voice_tone", voiceTonePreset);
-  }, [voiceTonePreset]);
-
-  const detectVoiceGender = (voiceName: string): "male" | "female" | "other" => {
-    const lower = voiceName.toLowerCase();
-    if (
-      lower.includes("zira") || lower.includes("eva") || lower.includes("hazel") ||
-      lower.includes("samantha") || lower.includes("susan") || lower.includes("catherine") ||
-      lower.includes("victoria") || lower.includes("karen") || lower.includes("fiona") ||
-      lower.includes("heather") || lower.includes("jenny") || lower.includes("aria") ||
-      lower.includes("ava") || lower.includes("female")
-    ) {
-      return "female";
-    }
-    if (
-      lower.includes("david") || lower.includes("mark") || lower.includes("george") ||
-      lower.includes("richard") || lower.includes("james") || lower.includes("prabhat") ||
-      lower.includes("daniel") || lower.includes("alex") || lower.includes("fred") ||
-      lower.includes("guy") || lower.includes("brian") || lower.includes("steffan") ||
-      lower.includes("male")
-    ) {
-      return "male";
-    }
-    return "other";
-  };
-
-  const handleApplyTonePreset = (presetKey: string) => {
-    setVoiceTonePreset(presetKey);
-    switch (presetKey) {
-      case "male_deep":
-        setVoicePitch(0.75);
-        setVoiceRate(0.95);
-        break;
-      case "female_crisp":
-        setVoicePitch(1.25);
-        setVoiceRate(1.05);
-        break;
-      case "soft_narrator":
-        setVoicePitch(0.9);
-        setVoiceRate(0.9);
-        break;
-      case "cyberpunk":
-        setVoicePitch(0.8);
-        setVoiceRate(1.15);
-        break;
-      case "speed_reader":
-        setVoicePitch(1.0);
-        setVoiceRate(1.4);
-        break;
-      case "anime":
-        setVoicePitch(1.4);
-        setVoiceRate(1.1);
-        break;
-      case "default":
-      default:
-        setVoicePitch(1.0);
-        setVoiceRate(1.0);
-        break;
-    }
-  };
-
   const handleTestVoicePreview = () => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const sampleText = "Hello! I am Vyze. Here is how your selected voice sounds.";
     const utterance = new SpeechSynthesisUtterance(sampleText);
-    utterance.pitch = voicePitch;
     utterance.rate = voiceRate;
+
     const systemVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
+    let appliedPitch = voicePitch;
+
     if (selectedVoiceName) {
-      const v = systemVoices.find((sv) => sv.name === selectedVoiceName);
-      if (v) utterance.voice = v;
+      const exactMatch = systemVoices.find((v) => v.name === selectedVoiceName);
+      if (exactMatch) {
+        utterance.voice = exactMatch;
+      } else {
+        const speaker = POPULAR_SPEAKERS.find((s) => s.id === selectedVoiceName || s.name === selectedVoiceName);
+        if (speaker) {
+          const keywordMatch = systemVoices.find((v) => v.name.toLowerCase().includes(speaker.keyword));
+          if (keywordMatch) {
+            utterance.voice = keywordMatch;
+          } else {
+            appliedPitch = voicePitch * speaker.defaultPitch;
+          }
+        }
+      }
     }
+    utterance.pitch = appliedPitch;
     window.speechSynthesis.speak(utterance);
   };
 
@@ -1096,26 +1103,50 @@ function App() {
   }
 
   async function handleAttachFilesToSession() {
-    if (!activeSessionId) return;
+    let currentSid = activeSessionId;
+    if (!currentSid) {
+      try {
+        currentSid = await invoke<string>("db_create_session", { title: "New Chat" });
+        const updated = await invoke<DbSession[]>("db_get_sessions");
+        setSessions(updated);
+        setActiveSessionId(currentSid);
+      } catch (err) {
+        console.error("Failed to create session on file attach:", err);
+        return;
+      }
+    }
     try {
       const msg = await invoke<string>("select_and_attach_files", {
-        sessionId: activeSessionId,
+        sessionId: currentSid,
         provider: provider
       });
       console.log(msg);
+      await loadMessagesForSession(currentSid);
     } catch (err) {
       console.error("Failed to attach files to session:", err);
     }
   }
 
   async function handleAttachFolderToSession() {
-    if (!activeSessionId) return;
+    let currentSid = activeSessionId;
+    if (!currentSid) {
+      try {
+        currentSid = await invoke<string>("db_create_session", { title: "New Chat" });
+        const updated = await invoke<DbSession[]>("db_get_sessions");
+        setSessions(updated);
+        setActiveSessionId(currentSid);
+      } catch (err) {
+        console.error("Failed to create session on folder attach:", err);
+        return;
+      }
+    }
     try {
       const msg = await invoke<string>("select_and_attach_folder", {
-        sessionId: activeSessionId,
+        sessionId: currentSid,
         provider: provider
       });
       console.log(msg);
+      await loadMessagesForSession(currentSid);
     } catch (err) {
       console.error("Failed to attach folder to session:", err);
     }
@@ -1253,15 +1284,25 @@ function App() {
     activeUtteranceRef.current = utterance;
     utterance.volume = 1.0;
     utterance.rate = voiceRate;
-    utterance.pitch = voicePitch;
 
     // Find the voice selected by the user or fallback to system default
     const systemVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
+    let appliedPitch = voicePitch;
 
     if (selectedVoiceName) {
       const userSelectedVoice = systemVoices.find((v) => v.name === selectedVoiceName);
       if (userSelectedVoice) {
         utterance.voice = userSelectedVoice;
+      } else {
+        const speaker = POPULAR_SPEAKERS.find((s) => s.id === selectedVoiceName || s.name === selectedVoiceName);
+        if (speaker) {
+          const keywordMatch = systemVoices.find((v) => v.name.toLowerCase().includes(speaker.keyword));
+          if (keywordMatch) {
+            utterance.voice = keywordMatch;
+          } else {
+            appliedPitch = voicePitch * speaker.defaultPitch;
+          }
+        }
       }
     } else {
       const targetVoice = systemVoices.find(
@@ -1269,7 +1310,9 @@ function App() {
           v.name.toLowerCase().includes("prabhat") ||
           v.name.toLowerCase().includes("prabahat") ||
           v.name.toLowerCase().includes("ava") ||
-          v.name.toLowerCase().includes("mark")
+          v.name.toLowerCase().includes("mark") ||
+          v.name.toLowerCase().includes("zira") ||
+          v.name.toLowerCase().includes("david")
       );
 
       if (targetVoice) {
@@ -1281,6 +1324,8 @@ function App() {
         }
       }
     }
+
+    utterance.pitch = appliedPitch;
 
     utterance.onstart = () => {
       setVoiceState("speaking");
@@ -1755,6 +1800,7 @@ function App() {
     setMessages([...newHistory, { role: "assistant", content: "" }]);
     setSelectedText(""); // Clear selected context since it was consumed
     setAttachedImage(null); // Clear screenshot after sending it!
+    isStreamingAbortedRef.current = false;
     setIsLoading(true);
 
     try {
@@ -1763,6 +1809,7 @@ function App() {
 
       // Append incoming streaming tokens to assistant bubble
       tokenChannel.onmessage = (token: string) => {
+        if (isStreamingAbortedRef.current) return;
         fullResponse += token;
         setMessages((prev) => {
           const updated = [...prev];
@@ -1786,7 +1833,7 @@ function App() {
       });
 
       // Sync assistant response to SQLite DB
-      if (currentSid && fullResponse.trim()) {
+      if (currentSid && fullResponse.trim() && !isStreamingAbortedRef.current) {
         invoke("db_add_message", {
           sessionId: currentSid,
           role: "assistant",
@@ -1794,6 +1841,11 @@ function App() {
           imageBase64: null,
           provider: provider
         }).catch(console.error);
+      }
+
+      if (isStreamingAbortedRef.current) {
+        setVoiceState("standby");
+        return;
       }
 
       // Auto-execute OS desktop automation immediately if detected!
@@ -1906,18 +1958,24 @@ function App() {
   }
 
   return (
-    <div className={`hud-container theme-${theme}`}>
-      {/* Animated Character Pet Widget (Peeks out from behind top-right of window) */}
+    <div className={`hud-container theme-${theme} preset-${windowSizePreset}`}>
+      {/* Animated Character Pet Widget (Peeks out from behind top-right of window card) */}
       {enableCharacterPet && <CharacterPet mood={petMood} />}
 
       <div className="hud-card">
         {/* Absolute Crooked Sticker Tab Header (Pops out of the card container) */}
         <div className="hud-header" data-tauri-drag-region>
           <div className="hud-brand" data-tauri-drag-region>
+            <img
+              src={themeLogos[theme] || logoPink}
+              alt="Vyze Theme Logo"
+              className="hud-theme-logo-img"
+              data-tauri-drag-region
+            />
             <span className="hud-title" data-tauri-drag-region>VYZE</span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
             <button
               type="button"
               className="sidebar-toggle-btn"
@@ -1927,7 +1985,7 @@ function App() {
               }}
               title="Chat History"
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="header-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="3" y1="12" x2="21" y2="12"></line>
                 <line x1="3" y1="6" x2="21" y2="6"></line>
                 <line x1="3" y1="18" x2="21" y2="18"></line>
@@ -1942,7 +2000,7 @@ function App() {
               }}
               title="Toggle Settings"
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="header-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
               </svg>
@@ -2232,108 +2290,71 @@ function App() {
                 </label>
               </div>
 
-              {voiceNarration && (
-                <div className="voice-controls-container">
-                  <div className="voice-row">
-                    <label className="select-setting-label">Voice Category:</label>
-                    <select
-                      className="theme-select"
-                      value={voiceGenderFilter}
-                      onChange={(e) => setVoiceGenderFilter(e.target.value as "all" | "male" | "female")}
-                    >
-                      <option value="all">All Voices</option>
-                      <option value="male">Male Voices</option>
-                      <option value="female">Female Voices</option>
-                    </select>
-                  </div>
-
-                  <div className="voice-row">
-                    <label className="select-setting-label">Voice Speaker:</label>
-                    <select
-                      className="theme-select"
-                      value={selectedVoiceName}
-                      onChange={(e) => setSelectedVoiceName(e.target.value)}
-                    >
-                      <option value="">(Default OS Voice)</option>
-                      {availableVoices
-                        .filter((v) => {
-                          if (voiceGenderFilter === "all") return true;
-                          const g = detectVoiceGender(v.name);
-                          return g === voiceGenderFilter;
-                        })
-                        .map((v) => (
-                          <option key={v.name} value={v.name}>
-                            {v.name} ({v.lang})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-
-                  <div className="voice-row">
-                    <label className="select-setting-label">Voice Tone Profile:</label>
-                    <select
-                      className="theme-select"
-                      value={voiceTonePreset}
-                      onChange={(e) => handleApplyTonePreset(e.target.value)}
-                    >
-                      <option value="default">Default Natural</option>
-                      <option value="male_deep">Deep Male Tone</option>
-                      <option value="female_crisp">Crisp Female Tone</option>
-                      <option value="soft_narrator">Soft Narrator</option>
-                      <option value="cyberpunk">Cyberpunk Synth</option>
-                      <option value="speed_reader">Speed Reader</option>
-                      <option value="anime">Anime / High Pitch</option>
-                    </select>
-                  </div>
-
-                  <div className="voice-row">
-                    <div className="voice-slider-container">
-                      <span style={{ minWidth: "45px" }}>Pitch: {voicePitch.toFixed(2)}</span>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="1.5"
-                        step="0.05"
-                        className="voice-range-slider"
-                        value={voicePitch}
-                        onChange={(e) => {
-                          setVoicePitch(parseFloat(e.target.value));
-                          setVoiceTonePreset("custom");
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="voice-row">
-                    <div className="voice-slider-container">
-                      <span style={{ minWidth: "45px" }}>Speed: {voiceRate.toFixed(2)}x</span>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="2.0"
-                        step="0.05"
-                        className="voice-range-slider"
-                        value={voiceRate}
-                        onChange={(e) => {
-                          setVoiceRate(parseFloat(e.target.value));
-                          setVoiceTonePreset("custom");
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="voice-row" style={{ justifyContent: "flex-end", marginTop: "2px" }}>
-                    <button
-                      type="button"
-                      className="test-voice-btn"
-                      onClick={handleTestVoicePreview}
-                      title="Test current voice speech settings"
-                    >
-                      🔊 Test Voice
-                    </button>
-                  </div>
+              <div className="settings-option" style={{ flexDirection: "column", alignItems: "flex-start", gap: "4px", width: "100%" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                  <label className="select-setting-label">Voice Speaker:</label>
+                  <button
+                    type="button"
+                    className="test-voice-btn"
+                    onClick={handleTestVoicePreview}
+                    title="Test current voice speech settings"
+                  >
+                    TEST VOICE
+                  </button>
                 </div>
-              )}
+                <select
+                  className="theme-select"
+                  style={{ width: "100%", boxSizing: "border-box" }}
+                  value={selectedVoiceName}
+                  onChange={(e) => setSelectedVoiceName(e.target.value)}
+                >
+                  <option value="">Default OS Speaker</option>
+                  <optgroup label="Popular Speakers">
+                    {POPULAR_SPEAKERS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {availableVoices.length > 0 && (
+                    <optgroup label="Installed System Voices">
+                      {availableVoices.map((v) => (
+                        <option key={v.name} value={v.name}>
+                          {v.name} ({v.lang})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+
+              <div className="settings-option" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                <label className="select-setting-label">Pitch ({voicePitch.toFixed(2)}):</label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.05"
+                  className="voice-range-slider"
+                  value={voicePitch}
+                  onChange={(e) => setVoicePitch(parseFloat(e.target.value))}
+                  style={{ width: "130px" }}
+                />
+              </div>
+
+              <div className="settings-option" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                <label className="select-setting-label">Speed ({voiceRate.toFixed(2)}x):</label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.05"
+                  className="voice-range-slider"
+                  value={voiceRate}
+                  onChange={(e) => setVoiceRate(parseFloat(e.target.value))}
+                  style={{ width: "130px" }}
+                />
+              </div>
               <div className="settings-option">
                 <label className="checkbox-setting-label">
                   <input
@@ -2709,55 +2730,6 @@ function App() {
               placeholder={provider === "gemini" ? "Ask Gemini..." : "Ask Ollama..."}
               disabled={isLoading || voiceState === "speaking"}
             />
-            {/* Camera Screen Capture Button */}
-            <button
-              type="button"
-              className={`capture-btn ${isCapturing ? "capturing" : ""}`}
-              onClick={handleCaptureScreen}
-              disabled={isLoading || isCapturing || voiceState === "speaking"}
-              title="Capture current screen"
-            >
-              {isCapturing ? (
-                <span className="capturing-loader"></span>
-              ) : (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                  <circle cx="12" cy="13" r="4"></circle>
-                </svg>
-              )}
-            </button>
-
-            {/* Add Session Files Attachment Button */}
-            <button
-              type="button"
-              className="upload-btn"
-              onClick={handleAttachFilesToSession}
-              disabled={isLoading || !activeSessionId}
-              title="Attach Files to this Chat (Session RAG)"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="12" y1="18" x2="12" y2="12"></line>
-                <line x1="9" y1="15" x2="15" y2="15"></line>
-              </svg>
-            </button>
-
-            {/* Add Session Folder Attachment Button */}
-            <button
-              type="button"
-              className="upload-btn"
-              onClick={handleAttachFolderToSession}
-              disabled={isLoading || !activeSessionId}
-              title="Attach Folder to this Chat (Session RAG)"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                <line x1="12" y1="17" x2="12" y2="11"></line>
-                <line x1="9" y1="14" x2="15" y2="14"></line>
-              </svg>
-            </button>
-
             {/* Hidden file input */}
             <input
               type="file"
@@ -2767,24 +2739,101 @@ function App() {
               onChange={handleFileUpload}
               disabled={isLoading || voiceState === "speaking"}
             />
-            {/* Attachment Button */}
-            <label
-              htmlFor="file-upload-input"
-              className="upload-btn"
-              title="Attach image or text document to prompt"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-              </svg>
-            </label>
+
+            {/* Unified Attachment & Context Popover Menu */}
+            <div className="attach-menu-container" ref={attachMenuRef}>
+              <button
+                type="button"
+                className={`attach-toggle-btn ${showAttachMenu ? "active" : ""}`}
+                onClick={() => setShowAttachMenu(!showAttachMenu)}
+                disabled={isLoading || voiceState === "speaking"}
+                title="Add Attachments, Files, Folders or Screen Capture"
+              >
+                <svg className="attach-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
+
+              {showAttachMenu && (
+                <div className="attach-popover-menu">
+                  <button
+                    type="button"
+                    className="attach-menu-item"
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      handleAttachFilesToSession();
+                    }}
+                  >
+                    <svg className="menu-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="12" y1="18" x2="12" y2="12"></line>
+                      <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                    <span>Attach Files (RAG)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="attach-menu-item"
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      handleAttachFolderToSession();
+                    }}
+                  >
+                    <svg className="menu-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                      <line x1="12" y1="17" x2="12" y2="11"></line>
+                      <line x1="9" y1="14" x2="15" y2="14"></line>
+                    </svg>
+                    <span>Attach Folder (RAG)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="attach-menu-item"
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      setTimeout(() => {
+                        document.getElementById("file-upload-input")?.click();
+                      }, 50);
+                    }}
+                  >
+                    <svg className="menu-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                    </svg>
+                    <span>Attach Image / Doc</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`attach-menu-item ${isCapturing ? "capturing" : ""}`}
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      handleCaptureScreen();
+                    }}
+                    disabled={isCapturing}
+                  >
+                    <svg className="menu-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                      <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                    <span>Capture Screen</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {isLoading ? (
               <button
                 type="button"
                 className="stop-generation-btn"
                 onClick={() => {
+                  isStreamingAbortedRef.current = true;
                   setIsLoading(false);
                   stopSpeaking();
+                  invoke("cancel_ai_stream").catch(console.error);
                 }}
                 title="Stop AI response generation"
               >
