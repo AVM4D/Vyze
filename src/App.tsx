@@ -144,6 +144,7 @@ function App() {
   // Screen Capture States
   const [attachedImage, setAttachedImage] = useState<string | null>(null); // Holds the base64 screenshot text
   const [isCapturing, setIsCapturing] = useState(false); // Shows if the app is taking a picture right now
+  const [isAttachmentsCollapsed, setIsAttachmentsCollapsed] = useState(false); // Collapsible attached files state
 
   // Settings & Sessions States
   const [showSettings, setShowSettings] = useState(false);
@@ -2601,28 +2602,38 @@ function App() {
           {/* Session Documents/Folders Attachments Tray */}
           {sessionAttachments.length > 0 && (
             <div className="attachments-tray" style={{ margin: "4px 12px", padding: "6px 8px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "4px" }}>
-              <div style={{ fontSize: "0.65em", fontWeight: "bold", color: "var(--fg-main)", marginBottom: "4px", opacity: 0.8, textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", justifyContent: "space-between" }}>
-                <span>Attached Knowledge Base</span>
-                <span style={{ color: "var(--primary-color)" }}>{sessionAttachments.length} files</span>
+              <div style={{ fontSize: "0.65em", fontWeight: "bold", color: "var(--fg-main)", marginBottom: "4px", opacity: 0.8, textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ cursor: "pointer" }} onClick={() => setIsAttachmentsCollapsed(!isAttachmentsCollapsed)}>
+                  {isAttachmentsCollapsed ? "▶ Show" : "▼ Hide"} Attached Knowledge Base ({sessionAttachments.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsAttachmentsCollapsed(!isAttachmentsCollapsed)}
+                  style={{ background: "none", border: "none", color: "var(--primary-color)", fontSize: "0.9em", cursor: "pointer", fontWeight: "bold" }}
+                >
+                  {isAttachmentsCollapsed ? "expand" : "collapse"}
+                </button>
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", maxHeight: "80px", overflowY: "auto" }}>
-                {sessionAttachments.map((doc) => (
-                  <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: "4px", background: "var(--bg-input)", padding: "2px 6px", borderRadius: "3px", fontSize: "0.75em", border: "1.1px solid var(--border-color)" }}>
-                    <span style={{ color: "var(--primary-color)", fontSize: "0.95em" }}>📄</span>
-                    <span style={{ color: "var(--fg-main)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={doc.file_path}>
-                      {doc.file_name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleDetachDocument(doc.id)}
-                      style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "1.1em", padding: "0 2px" }}
-                      title="Remove document from chat context"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
+              {!isAttachmentsCollapsed && (
+                <div className="attachments-list" style={{ display: "flex", flexWrap: "wrap", gap: "4px", maxHeight: "65px", overflowY: "auto", paddingRight: "2px" }}>
+                  {sessionAttachments.map((doc) => (
+                    <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: "4px", background: "var(--bg-input)", padding: "2px 6px", borderRadius: "3px", fontSize: "0.75em", border: "1.1px solid var(--border-color)" }}>
+                      <span style={{ color: "var(--primary-color)", fontSize: "0.95em" }}>📄</span>
+                      <span style={{ color: "var(--fg-main)", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={doc.file_path}>
+                        {doc.file_name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDetachDocument(doc.id)}
+                        style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "1.1em", padding: "0 2px" }}
+                        title="Remove document from chat context"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
