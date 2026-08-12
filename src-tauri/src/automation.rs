@@ -24,8 +24,19 @@ pub async fn open_uri(uri: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to launch URI: {}", e))?;
 
         if output.status.success() {
-            // Trigger automatic press-Enter keys to autoplay or auto-send!
-            if clean_uri.starts_with("spotify:search:") || clean_uri.starts_with("whatsapp://send") {
+            // Trigger automatic keys to autoplay or auto-send!
+            if clean_uri.starts_with("spotify:search:") {
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(3000)).await;
+                    let _ = tokio::task::spawn_blocking(move || {
+                        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
+                            let _ = enigo.key(Key::Tab, Click);
+                            std::thread::sleep(std::time::Duration::from_millis(250));
+                            let _ = enigo.key(Key::Return, Click);
+                        }
+                    }).await;
+                });
+            } else if clean_uri.starts_with("whatsapp://send") {
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_millis(2500)).await;
                     let _ = tokio::task::spawn_blocking(move || {
@@ -485,9 +496,10 @@ pub async fn get_system_status() -> Result<String, String> {
                 $diskStr += "`n- Storage ($($disk.DeviceID)): ${diskFreeGB} GB Free / ${diskTotalGB} GB (${diskPercent}% used)"
             }
 
-            # Retrieve GPU information
-            $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue
-            $gpuName = if ($gpu) { ($gpu | Select-Object -First 1).Name } else { "N/A" }
+            # Retrieve GPU information (filtering out virtual/mirror display adapters like Parsec, Citrix, Basic)
+            $gpus = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "Virtual" -and $_.Name -notmatch "Basic" -and $_.Name -notmatch "Mirror" -and $_.Name -notmatch "Parsec" }
+            $gpu = if ($gpus) { $gpus | Select-Object -First 1 } else { Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1 }
+            $gpuName = if ($gpu) { $gpu.Name } else { "N/A" }
             $gpuPercent = 0
             try {
                 $gpuSamples = (Get-Counter '\GPU Engine(*)\Utilization Percentage' -ErrorAction SilentlyContinue).CounterSamples
@@ -586,6 +598,8 @@ pub async fn create_file(target: &str) -> Result<String, String> {
     let filename = parts.first().copied().unwrap_or("note.txt").trim();
     let content = parts.get(1).copied().unwrap_or("").trim();
 
+    let decoded_content = urlencoding::decode(content).map_err(|e| format!("Decoding failed: {}", e))?;
+
     let desktop_dir = std::env::var("USERPROFILE")
         .map(|p| std::path::PathBuf::from(p).join("Desktop"))
         .or_else(|_| std::env::var("HOME").map(|p| std::path::PathBuf::from(p).join("Desktop")))
@@ -593,28 +607,38 @@ pub async fn create_file(target: &str) -> Result<String, String> {
 
     let file_path = desktop_dir.join(filename);
 
-    std::fs::write(&file_path, content)
+    std::fs::write(&file_path, decoded_content.as_ref())
         .map_err(|e| format!("Failed to create file at {:?}: {}", file_path, e))?;
 
     Ok(format!("✓ Successfully created file on Desktop: {}", filename))
 }
 
-/// Search user local files by name/glob in common folders (Desktop, Documents, Downloads)
-pub async fn search_files(query: &str) -> Result<String, String> {
-    let clean_query = query.trim();
+/// Search user local files by name/glob in common folders, with optional scope restrictions
+pub async fn search_files(target: &str) -> Result<String, String> {
+    let parts: Vec<&str> = target.splitn(2, '|').collect();
+    let clean_query = parts.first().copied().unwrap_or("").trim();
+    let scope = parts.get(1).copied().unwrap_or(&"").trim().to_lowercase();
+
     if clean_query.is_empty() {
         return Err("Search query is empty".to_string());
     }
 
     #[cfg(target_os = "windows")]
     {
+        let paths_script = match scope.as_str() {
+            "desktop" => "[System.IO.Path]::Combine($env:USERPROFILE, \"Desktop\")",
+            "documents" => "[System.IO.Path]::Combine($env:USERPROFILE, \"Documents\")",
+            "downloads" => "[System.IO.Path]::Combine($env:USERPROFILE, \"Downloads\")",
+            _ => r#"[System.IO.Path]::Combine($env:USERPROFILE, "Desktop"),
+                [System.IO.Path]::Combine($env:USERPROFILE, "Documents"),
+                [System.IO.Path]::Combine($env:USERPROFILE, "Downloads")"#,
+        };
+
         let script = format!(
             r#"
             $query = "{}"
             $paths = @(
-                [System.IO.Path]::Combine($env:USERPROFILE, "Desktop"),
-                [System.IO.Path]::Combine($env:USERPROFILE, "Documents"),
-                [System.IO.Path]::Combine($env:USERPROFILE, "Downloads")
+                {}
             )
             $results = @()
             foreach ($path in $paths) {{
@@ -628,7 +652,8 @@ pub async fn search_files(query: &str) -> Result<String, String> {
                 $results | ForEach-Object {{ "- **" + $_.Name + "**: " + $_.FullName }} | Out-String
             }}
             "#,
-            clean_query.replace('"', "`\"")
+            clean_query.replace('"', "`\""),
+            paths_script
         );
 
         let output = TokioCommand::new("powershell")
@@ -648,8 +673,6 @@ pub async fn search_files(query: &str) -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        Err("File search supported on Windows only".to_string())
+        Err("File search supported on Windows".to_string())
     }
 }
-
-

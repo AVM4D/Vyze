@@ -501,6 +501,19 @@ html {
   border-radius: 3px;
 }
 
+.attachments-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.attachments-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.attachments-list::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 2px;
+}
+
 /* --- Chat Rows & Bubbles --- */
 .message-row {
   display: flex;
