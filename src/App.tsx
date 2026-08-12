@@ -627,53 +627,31 @@ function App() {
       return { action: "media_control", target: "volume_down", label: "decreasing volume..." };
     }
 
-    // 2. WhatsApp Direct Intent
-    if (clean.includes("whatsapp") || clean.includes("send message to")) {
-      const callMatch = /(?:whatsapp call|call on whatsapp|call)\s+(.+)/i.exec(promptText);
+    // 2. WhatsApp Direct Intent (Numeric Phone Numbers Only)
+    if (clean.includes("whatsapp")) {
+      const callMatch = /(?:whatsapp call|call on whatsapp|call)\s+([+\d\s()-.]{5,})/i.exec(promptText);
       if (callMatch) {
-        const contact = callMatch[1].replace(/on whatsapp/i, "").trim();
-        const isNumeric = /^[+\d\s()-.]{5,}$/.test(contact);
-        if (isNumeric) {
-          const phone = contact.replace(/[^\d]/g, "");
-          return {
-            action: "open_uri",
-            target: `whatsapp://call?phone=${phone}`,
-            label: `initiating WhatsApp call to ${phone}...`
-          };
-        } else {
-          return {
-            action: "open_app",
-            target: "whatsapp",
-            label: `opening WhatsApp to call ${contact}...`
-          };
-        }
+        const phone = callMatch[1].replace(/[^\d]/g, "");
+        return {
+          action: "open_uri",
+          target: `whatsapp://call?phone=${phone}`,
+          label: `initiating WhatsApp call to ${phone}...`
+        };
       }
-
-      const msgMatch = /(?:send\s+)?(?:whatsapp\s+message\s+|message\s+|whatsapp\s+|text\s+)(?:to\s+)?([A-Za-z0-9\s+()-]+)\s*(?:saying|message|text)?\s*(.+)/i.exec(promptText);
+      const msgMatch = /(?:send\s+)?whatsapp\s*(?:message\s+)?(?:to\s+)?([+\d\s()-.]{5,})\s*(?:saying|message|text)?\s*(.+)/i.exec(promptText);
       if (msgMatch) {
-        const contact = msgMatch[1].trim();
-        const text = msgMatch[2].trim();
-        const isNumeric = /^[+\d\s()-.]{5,}$/.test(contact);
-        if (isNumeric) {
-          const phone = contact.replace(/[^\d]/g, "");
-          return {
-            action: "open_uri",
-            target: `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`,
-            label: `sending WhatsApp message to ${phone}...`
-          };
-        } else {
-          // Open WhatsApp send with text, allowing contact choice
-          return {
-            action: "open_uri",
-            target: `whatsapp://send?text=${encodeURIComponent(text)}`,
-            label: `opening WhatsApp contact picker to message ${contact}...`
-          };
-        }
+        const phone = msgMatch[1].replace(/[^\d]/g, "");
+        const text = encodeURIComponent(msgMatch[2].trim());
+        return {
+          action: "open_uri",
+          target: `whatsapp://send?phone=${phone}&text=${text}`,
+          label: `sending WhatsApp message to ${phone}...`
+        };
       }
     }
 
     // 3. Email Direct Intent
-    if (clean.includes("email") || clean.includes("mail") || clean.includes("mailto")) {
+    if (clean.includes("email") || clean.includes("mailto") || clean.includes("gmail") || (clean.includes("send mail") && clean.includes("@"))) {
       const emailRegex = /([a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4})/;
       const emailMatch = emailRegex.exec(promptText);
       if (emailMatch) {
@@ -682,12 +660,14 @@ function App() {
         let body = "";
         
         // Match subject cleanly by terminating at "body" or "saying" or end
-        const subjectMatch = /subject\s+(.+?)(?:\s+body\s+|\s+saying\s+|$)/i.exec(promptText);
+        const subjectMatch = /subject\s+(.+?)(?:\s+(?:and\s+)?body\s+|\s+saying\s+|$)/i.exec(promptText);
         const bodyMatch = /body\s+(.+)/i.exec(promptText);
         const sayingMatch = /saying\s+(.+)/i.exec(promptText);
         
         if (subjectMatch) {
           subject = subjectMatch[1].trim();
+          // Remove trailing connector words if present
+          subject = subject.replace(/\s+(?:and|with)$/i, "").trim();
         }
         if (bodyMatch) {
           body = bodyMatch[1].trim();
@@ -805,13 +785,23 @@ function App() {
       const searchMatch = /(?:search|find)\s+(?:local\s+)?files\s+(?:for|matching)\s+(.+)/i.exec(promptText);
       if (searchMatch) {
         let q = searchMatch[1].trim();
+        let scope = "";
+        if (/\bdesktop\b/i.test(q)) {
+          scope = "desktop";
+        } else if (/\bdocuments\b/i.test(q)) {
+          scope = "documents";
+        } else if (/\bdownloads\b/i.test(q)) {
+          scope = "downloads";
+        }
+
         // Remove scoping suffix like "on my desktop", "on desktop", "in downloads"
         q = q.replace(/\s+(?:on|in)\s+(?:my\s+)?(?:desktop|downloads|documents)$/i, "").trim();
         q = q.replace(/^["']|["']$/g, ""); // strip quotes
+
         return {
           action: "search_files",
-          target: q,
-          label: `searching files for '${q}'...`
+          target: scope ? `${q}|${scope}` : q,
+          label: scope ? `searching ${scope} for '${q}'...` : `searching files for '${q}'...`
         };
       }
     }

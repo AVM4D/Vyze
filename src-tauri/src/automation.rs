@@ -1,5 +1,4 @@
 use tokio::process::Command as TokioCommand;
-use enigo::{Enigo, Key, Settings, Keyboard, Direction::Click};
 use std::time::Duration;
 
 /// Opens any system URI protocol (spotify:, mailto:, whatsapp:, https:) or file path.
@@ -24,26 +23,11 @@ pub async fn open_uri(uri: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to launch URI: {}", e))?;
 
         if output.status.success() {
-            // Trigger automatic keys to autoplay or auto-send!
+            // Trigger OS Media Play/Pause command after opening Spotify search to start playback
             if clean_uri.starts_with("spotify:search:") {
                 tokio::spawn(async move {
-                    tokio::time::sleep(Duration::from_millis(3000)).await;
-                    let _ = tokio::task::spawn_blocking(move || {
-                        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
-                            let _ = enigo.key(Key::Tab, Click);
-                            std::thread::sleep(std::time::Duration::from_millis(250));
-                            let _ = enigo.key(Key::Return, Click);
-                        }
-                    }).await;
-                });
-            } else if clean_uri.starts_with("whatsapp://send") {
-                tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_millis(2500)).await;
-                    let _ = tokio::task::spawn_blocking(move || {
-                        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
-                            let _ = enigo.key(Key::Return, Click);
-                        }
-                    }).await;
+                    let _ = media_control("play_pause").await;
                 });
             }
             Ok(())
