@@ -627,25 +627,47 @@ function App() {
     }
 
     // 2. WhatsApp Direct Intent
-    if (clean.includes("whatsapp")) {
-      const callMatch = /(?:whatsapp call|call on whatsapp|call)\s+([+\d\s()-.]{5,})/i.exec(promptText);
+    if (clean.includes("whatsapp") || clean.includes("send message to")) {
+      const callMatch = /(?:whatsapp call|call on whatsapp|call)\s+(.+)/i.exec(promptText);
       if (callMatch) {
-        const phone = callMatch[1].replace(/[^\d]/g, "");
-        return {
-          action: "open_uri",
-          target: `whatsapp://call?phone=${phone}`,
-          label: `initiating WhatsApp call to ${phone}...`
-        };
+        const contact = callMatch[1].replace(/on whatsapp/i, "").trim();
+        const isNumeric = /^[+\d\s()-.]{5,}$/.test(contact);
+        if (isNumeric) {
+          const phone = contact.replace(/[^\d]/g, "");
+          return {
+            action: "open_uri",
+            target: `whatsapp://call?phone=${phone}`,
+            label: `initiating WhatsApp call to ${phone}...`
+          };
+        } else {
+          return {
+            action: "open_app",
+            target: "whatsapp",
+            label: `opening WhatsApp to call ${contact}...`
+          };
+        }
       }
-      const msgMatch = /(?:send\s+)?whatsapp\s*(?:message\s+)?(?:to\s+)?([+\d\s()-.]{5,})\s*(?:saying|message|text)?\s*(.+)/i.exec(promptText);
+
+      const msgMatch = /(?:send\s+)?(?:whatsapp\s+message\s+|message\s+|whatsapp\s+|text\s+)(?:to\s+)?([A-Za-z0-9\s+()-]+)\s*(?:saying|message|text)?\s*(.+)/i.exec(promptText);
       if (msgMatch) {
-        const phone = msgMatch[1].replace(/[^\d]/g, "");
-        const text = encodeURIComponent(msgMatch[2].trim());
-        return {
-          action: "open_uri",
-          target: `whatsapp://send?phone=${phone}&text=${text}`,
-          label: `sending WhatsApp message to ${phone}...`
-        };
+        const contact = msgMatch[1].trim();
+        const text = msgMatch[2].trim();
+        const isNumeric = /^[+\d\s()-.]{5,}$/.test(contact);
+        if (isNumeric) {
+          const phone = contact.replace(/[^\d]/g, "");
+          return {
+            action: "open_uri",
+            target: `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`,
+            label: `sending WhatsApp message to ${phone}...`
+          };
+        } else {
+          // Open WhatsApp send with text, allowing contact choice
+          return {
+            action: "open_uri",
+            target: `whatsapp://send?text=${encodeURIComponent(text)}`,
+            label: `opening WhatsApp contact picker to message ${contact}...`
+          };
+        }
       }
     }
 
@@ -658,7 +680,8 @@ function App() {
         let subject = "Vyze Draft";
         let body = "";
         
-        const subjectMatch = /subject\s+(.*?)(?:\s+body\s+|$)/i.exec(promptText);
+        // Match subject cleanly by terminating at "body" or "saying" or end
+        const subjectMatch = /subject\s+(.+?)(?:\s+body\s+|\s+saying\s+|$)/i.exec(promptText);
         const bodyMatch = /body\s+(.+)/i.exec(promptText);
         const sayingMatch = /saying\s+(.+)/i.exec(promptText);
         
@@ -671,10 +694,18 @@ function App() {
           body = sayingMatch[1].trim();
         }
         
+        let uriTarget = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        let label = `drafting email to ${email}...`;
+        
+        if (clean.includes("gmail")) {
+          uriTarget = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+          label = `opening Gmail in browser to draft email to ${email}...`;
+        }
+
         return {
           action: "open_uri",
-          target: `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
-          label: `drafting email to ${email}...`
+          target: uriTarget,
+          label
         };
       }
     }
@@ -746,7 +777,7 @@ function App() {
 
     // 6. File Utilities (Create & Search) Direct Intent
     if (clean.includes("file") || clean.includes("note")) {
-      const createFileMatch = /(?:create|make)\s+file\s+(\S+)\s+(?:with content|containing)\s+(.+)/i.exec(promptText);
+      const createFileMatch = /(?:create|make)\s+file\s+(\S+)\s+(?:with content|containing|saying)\s+(.+)/i.exec(promptText);
       if (createFileMatch) {
         return {
           action: "create_file",
@@ -754,7 +785,7 @@ function App() {
           label: `creating file '${createFileMatch[1]}' on Desktop...`
         };
       }
-      const createNoteMatch = /(?:create|make)\s+note\s+(\S+)\s+(?:with content|containing)\s+(.+)/i.exec(promptText);
+      const createNoteMatch = /(?:create|make)\s+note\s+(\S+)\s+(?:with content|containing|saying)\s+(.+)/i.exec(promptText);
       if (createNoteMatch) {
         return {
           action: "create_file",
@@ -772,10 +803,14 @@ function App() {
       }
       const searchMatch = /(?:search|find)\s+(?:local\s+)?files\s+(?:for|matching)\s+(.+)/i.exec(promptText);
       if (searchMatch) {
+        let q = searchMatch[1].trim();
+        // Remove scoping suffix like "on my desktop", "on desktop", "in downloads"
+        q = q.replace(/\s+(?:on|in)\s+(?:my\s+)?(?:desktop|downloads|documents)$/i, "").trim();
+        q = q.replace(/^["']|["']$/g, ""); // strip quotes
         return {
           action: "search_files",
-          target: searchMatch[1].trim(),
-          label: `searching files for '${searchMatch[1].trim()}'...`
+          target: q,
+          label: `searching files for '${q}'...`
         };
       }
     }
@@ -1281,8 +1316,11 @@ function App() {
       return;
     }
 
+    // Strip automation blocks completely from TTS voice synthesis
+    const cleanTextWithoutAutomation = text.replace(/```automation[\s\S]*?```/gi, "");
+
     // Clean up markdown markers for natural voice synthesis
-    const cleanText = text
+    const cleanText = cleanTextWithoutAutomation
       .replace(/[*#`_\-]/g, "")
       .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1")
       .trim();
@@ -1534,14 +1572,13 @@ function App() {
 
   // 1. Listen for the global selection, silent screen capture events, and timers from Rust
   useEffect(() => {
-    let unlistenTextFn: (() => void) | null = null;
-    let unlistenScreenFn: (() => void) | null = null;
-    let unlistenTimerFn: (() => void) | null = null;
-    let unlistenRagFn: (() => void) | null = null;
+    let active = true;
+    let unsubscribes: (() => void)[] = [];
 
     async function setupListeners() {
       // Listen for text selection capture
-      unlistenTextFn = await listen<string>("selection-captured", (event) => {
+      const u1 = await listen<string>("selection-captured", (event) => {
+        if (!active) return;
         const text = event.payload;
         if (text && text.trim()) {
           setSelectedText(text.trim());
@@ -1552,18 +1589,22 @@ function App() {
           inputRef.current?.focus();
         }, 50);
       });
+      unsubscribes.push(u1);
 
       // Listen for silent auto screen capture complete
-      unlistenScreenFn = await listen<string>("auto-screen-captured", (event) => {
+      const u2 = await listen<string>("auto-screen-captured", (event) => {
+        if (!active) return;
         const base64 = event.payload;
         if (base64) {
           setAttachedImage(base64);
           playBeep(); // Beep to signal that the hidden capture succeeded!
         }
       });
+      unsubscribes.push(u2);
 
       // Listen for background timer finished event
-      unlistenTimerFn = await listen<{ id: string; label: string; duration_secs: number }>("timer-finished", (event) => {
+      const u3 = await listen<{ id: string; label: string; duration_secs: number }>("timer-finished", (event) => {
+        if (!active) return;
         const { id, label } = event.payload;
         playBeep();
 
@@ -1580,9 +1621,11 @@ function App() {
         // Remove timer from the local React list
         setActiveTimers((prev) => prev.filter((t) => t.id !== id));
       });
+      unsubscribes.push(u3);
 
       // Listen for RAG ingestion progress events
-      unlistenRagFn = await listen<any>("rag-progress", (event) => {
+      const u4 = await listen<any>("rag-progress", (event) => {
+        if (!active) return;
         const payload = event.payload;
         setRagProgress(payload);
         
@@ -1597,16 +1640,17 @@ function App() {
           setTimeout(() => setRagProgress(null), 3500);
         }
       });
+      unsubscribes.push(u4);
     }
 
     setupListeners();
 
     // Clean up event listeners on unmount
     return () => {
-      if (unlistenTextFn) unlistenTextFn();
-      if (unlistenScreenFn) unlistenScreenFn();
-      if (unlistenTimerFn) unlistenTimerFn();
-      if (unlistenRagFn) unlistenRagFn();
+      active = false;
+      for (const unsub of unsubscribes) {
+        unsub();
+      }
     };
   }, []);
 
@@ -1708,7 +1752,7 @@ function App() {
         playBeep();
         triggerHappyBurst();
 
-        let responseContent = (res && res !== "Execution successful") ? res : `✓ ${promptAction.label.replace("...", "")}`;
+        let responseContent = (res && res !== "Execution successful" && res !== "URI opened successfully" && !res.startsWith("Launched")) ? res : `✓ ${promptAction.label.replace("...", "")}`;
         
         if (promptAction.action === "set_timer") {
           try {
@@ -2561,7 +2605,7 @@ function App() {
                 <span>Attached Knowledge Base</span>
                 <span style={{ color: "var(--primary-color)" }}>{sessionAttachments.length} files</span>
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", maxHeight: "80px", overflowY: "auto" }}>
                 {sessionAttachments.map((doc) => (
                   <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: "4px", background: "var(--bg-input)", padding: "2px 6px", borderRadius: "3px", fontSize: "0.75em", border: "1.1px solid var(--border-color)" }}>
                     <span style={{ color: "var(--primary-color)", fontSize: "0.95em" }}>📄</span>
@@ -2656,7 +2700,19 @@ function App() {
                       </div>
                     ) : (
                       <>
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        <ReactMarkdown
+                          components={{
+                            code({ inline, className, children, ...props }) {
+                              const match = /language-(\w+)/.exec(className || '');
+                              if (!inline && match && match[1] === 'automation') {
+                                return null;
+                              }
+                              return <code className={className} {...props}>{children}</code>;
+                            }
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
                         {msg.role === "assistant" && (() => {
                           const runnableCmd = getRunnableTerminalCommand(msg.content);
                           const autoAction = getRunnableAutomationAction(msg.content);

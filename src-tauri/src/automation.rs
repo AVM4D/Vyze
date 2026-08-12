@@ -1,4 +1,6 @@
 use tokio::process::Command as TokioCommand;
+use enigo::{Enigo, Key, Settings, Keyboard, Direction::Click};
+use std::time::Duration;
 
 /// Opens any system URI protocol (spotify:, mailto:, whatsapp:, https:) or file path.
 pub async fn open_uri(uri: &str) -> Result<(), String> {
@@ -22,6 +24,17 @@ pub async fn open_uri(uri: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to launch URI: {}", e))?;
 
         if output.status.success() {
+            // Trigger automatic press-Enter keys to autoplay or auto-send!
+            if clean_uri.starts_with("spotify:search:") || clean_uri.starts_with("whatsapp://send") {
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(2500)).await;
+                    let _ = tokio::task::spawn_blocking(move || {
+                        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
+                            let _ = enigo.key(Key::Return, Click);
+                        }
+                    }).await;
+                });
+            }
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -56,7 +69,11 @@ pub async fn set_brightness(level: u32) -> Result<(), String> {
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(format!("WMI Brightness set failed: {}", stderr))
+            if stderr.contains("Not supported") || stderr.contains("ManagementException") {
+                Err("Screen brightness control is only supported on integrated laptop displays, not external desktop monitors.".to_string())
+            } else {
+                Err(format!("WMI Brightness set failed: {}", stderr))
+            }
         }
     }
 
@@ -468,7 +485,20 @@ pub async fn get_system_status() -> Result<String, String> {
                 $diskStr += "`n- Storage ($($disk.DeviceID)): ${diskFreeGB} GB Free / ${diskTotalGB} GB (${diskPercent}% used)"
             }
 
-            "📊 Vyze System Hardware Report:`n- Battery: $battStr`n- CPU Utilization: $cpuStr`n- RAM Usage: ${ramUsedGB} GB / ${ramTotalGB} GB (${ramPercent}%)$diskStr"
+            # Retrieve GPU information
+            $gpu = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue
+            $gpuName = if ($gpu) { ($gpu | Select-Object -First 1).Name } else { "N/A" }
+            $gpuPercent = 0
+            try {
+                $gpuSamples = (Get-Counter '\GPU Engine(*)\Utilization Percentage' -ErrorAction SilentlyContinue).CounterSamples
+                if ($gpuSamples) {
+                    $gpuSum = ($gpuSamples | Measure-Object -Property CookedValue -Sum).Sum
+                    $gpuPercent = [math]::Round($gpuSum, 1)
+                }
+            } catch {}
+            $gpuStr = if ($gpuName -ne "N/A") { "`n- GPU: $gpuName (Usage: $gpuPercent%)" } else { "" }
+
+            "📊 Vyze System Hardware Report:`n- Battery: $battStr`n- CPU Utilization: $cpuStr$gpuStr`n- RAM Usage: ${ramUsedGB} GB / ${ramTotalGB} GB (${ramPercent}%)$diskStr"
         "#;
 
         let output = TokioCommand::new("powershell")
