@@ -278,6 +278,14 @@ async fn ask_vyze(
                 .or_else(|| std::env::var("OPENAI_MODEL").ok());
             Box::new(ai::OpenAIProvider::new(api_key, model, Some(active_system_prompt)))
         }
+        "groq" => {
+            let api_key = state.db.get_setting("groq_api_key").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("GROQ_API_KEY").ok())
+                .ok_or_else(|| "Groq API key is not set. Please enter your API key in Settings (⚙) -> Setup.".to_string())?;
+            let model = state.db.get_setting("groq_model").ok().flatten().filter(|s| !s.trim().is_empty())
+                .or_else(|| std::env::var("GROQ_MODEL").ok());
+            Box::new(ai::GroqProvider::new(api_key, model, Some(active_system_prompt)))
+        }
         "anthropic" => {
             let api_key = state.db.get_setting("anthropic_api_key").ok().flatten().filter(|s| !s.trim().is_empty())
                 .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
@@ -507,44 +515,41 @@ fn write_clipboard(text: String) -> Result<(), String> {
 
 // Shared helper function to copy the active selection and restore clipboard state
 async fn perform_capture() -> String {
-    // 1. Open clipboard and backup original text
-    let mut clipboard = match arboard::Clipboard::new() {
-        Ok(c) => c,
-        Err(_) => return "".to_string(),
-    };
-    let backup_text = clipboard.get_text().ok();
-
-    // 2. Clear clipboard
-    let _ = clipboard.set_text("".to_string());
-
-    // 3. Offload the blocking input simulation to a background worker thread
-    let _ = tokio::task::spawn_blocking(move || {
-        let mut enigo = match Enigo::new(&Settings::default()) {
-            Ok(e) => e,
-            Err(_) => return,
+    tokio::task::spawn_blocking(move || {
+        // 1. Open clipboard and backup original text
+        let mut clipboard = match arboard::Clipboard::new() {
+            Ok(c) => c,
+            Err(_) => return "".to_string(),
         };
+        let backup_text = clipboard.get_text().ok();
 
-        // Simulate pressing Ctrl + C (using Unicode('c'))
-        let _ = enigo.key(Key::Control, Press);
-        let _ = enigo.key(Key::Unicode('c'), Click);
-        let _ = enigo.key(Key::Control, Release);
-    })
-    .await;
-
-    // 4. Sleep to allow the OS and application to process copy command
-    tokio::time::sleep(Duration::from_millis(100)).await;
-
-    // 5. Read selection
-    let selected_text = clipboard.get_text().unwrap_or_else(|_| "".to_string());
-
-    // 6. Restore original clipboard text
-    if let Some(original) = backup_text {
-        let _ = clipboard.set_text(original);
-    } else {
+        // 2. Clear clipboard
         let _ = clipboard.set_text("".to_string());
-    }
 
-    selected_text
+        // 3. Simulate pressing Ctrl + C
+        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
+            let _ = enigo.key(Key::Control, Press);
+            let _ = enigo.key(Key::Unicode('c'), Click);
+            let _ = enigo.key(Key::Control, Release);
+        }
+
+        // 4. Sleep to allow the OS and application to process copy command
+        std::thread::sleep(Duration::from_millis(150));
+
+        // 5. Read selection
+        let selected_text = clipboard.get_text().unwrap_or_else(|_| "".to_string());
+
+        // 6. Restore original clipboard text
+        if let Some(original) = backup_text {
+            let _ = clipboard.set_text(original);
+        } else {
+            let _ = clipboard.set_text("".to_string());
+        }
+
+        selected_text
+    })
+    .await
+    .unwrap_or_else(|_| "".to_string())
 }
 
 // Tauri command that lets React trigger capture manually if needed
@@ -1153,14 +1158,14 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // 2. Global Shortcut setup
+            // 2. Global Shortcut setup (Ctrl+Space to toggle window)
             let ctrl_space = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
 
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(|app, shortcut, event| {
-                        if event.state() == ShortcutState::Pressed {
-                            if shortcut.matches(Modifiers::CONTROL, Code::Space) {
+                        if shortcut.matches(Modifiers::CONTROL, Code::Space) {
+                            if event.state() == ShortcutState::Pressed {
                                 toggle_window(app);
                             }
                         }
@@ -1169,6 +1174,40 @@ pub fn run() {
             )?;
 
             app.global_shortcut().register(ctrl_space)?;
+
+            // 3. Hardware Physical Key Monitor for Push-To-Talk (Supports Alt+V [Voice] & Ctrl+Shift+Space)
+            #[cfg(windows)]
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+                    let mut was_holding = false;
+
+                    loop {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+
+                        // 0x12 is VK_MENU (Alt), 0x56 is VK_V ('V' for Voice)
+                        // 0x11 is VK_CONTROL (Ctrl), 0x10 is VK_SHIFT (Shift), 0x20 is VK_SPACE (Space)
+                        let is_alt = unsafe { (GetAsyncKeyState(0x12) as u16 & 0x8000) != 0 };
+                        let is_v = unsafe { (GetAsyncKeyState(0x56) as u16 & 0x8000) != 0 };
+                        let is_ctrl = unsafe { (GetAsyncKeyState(0x11) as u16 & 0x8000) != 0 };
+                        let is_shift = unsafe { (GetAsyncKeyState(0x10) as u16 & 0x8000) != 0 };
+                        let is_space = unsafe { (GetAsyncKeyState(0x20) as u16 & 0x8000) != 0 };
+                        
+                        // Supports Alt+V (Voice) or Ctrl+Shift+Space — completely free from Windows and GPU software conflicts
+                        let is_holding = (is_alt && is_v) || (is_ctrl && is_shift && is_space);
+
+                        if is_holding && !was_holding {
+                            was_holding = true;
+                            show_main_window(app_handle.clone());
+                            let _ = app_handle.emit("ptt-start", ());
+                        } else if !is_holding && was_holding {
+                            was_holding = false;
+                            let _ = app_handle.emit("ptt-stop", ());
+                        }
+                    }
+                });
+            }
 
             Ok(())
         })

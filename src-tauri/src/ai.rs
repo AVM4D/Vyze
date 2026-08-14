@@ -382,6 +382,26 @@ impl AiProvider for OpenAIProvider {
             }
 
             for msg in history.iter() {
+                let is_vision_model = model.to_lowercase().contains("vision") || model.to_lowercase().contains("vl") || model.to_lowercase().contains("gpt-4");
+
+                if is_vision_model {
+                    if let Some(ref img) = msg.image_base64 {
+                        if !img.is_empty() {
+                            let content_array = serde_json::json!([
+                                { "type": "text", "text": &msg.content },
+                                {
+                                    "type": "image_url",
+                                    "image_url": { "url": format!("data:image/jpeg;base64,{}", img), "detail": "auto" }
+                                }
+                            ]);
+                            messages.push(serde_json::json!({
+                                "role": msg.role,
+                                "content": content_array
+                            }));
+                            continue;
+                        }
+                    }
+                }
                 messages.push(serde_json::json!({
                     "role": msg.role,
                     "content": msg.content
@@ -414,6 +434,193 @@ impl AiProvider for OpenAIProvider {
                 let _ = tx.send(Err(format!("OpenAI API error ({}): {}", status, err_text))).await;
                 return;
             }
+
+            let mut stream = res.bytes_stream();
+            let mut buffer = String::new();
+
+            while let Some(chunk_result) = stream.next().await {
+                match chunk_result {
+                    Ok(bytes) => {
+                        if let Ok(text) = std::str::from_utf8(&bytes) {
+                            buffer.push_str(text);
+
+                            while let Some(newline_idx) = buffer.find('\n') {
+                                let line = buffer[..newline_idx].trim().to_string();
+                                buffer.drain(..=newline_idx);
+
+                                if line.starts_with("data: ") {
+                                    let data_str = line.trim_start_matches("data: ").trim();
+                                    if data_str == "[DONE]" {
+                                        break;
+                                    }
+                                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                        if let Some(delta) = val["choices"][0]["delta"]["content"].as_str() {
+                                            if !delta.is_empty() {
+                                                if tx.send(Ok(delta.to_string())).await.is_err() {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("Stream error: {}", e))).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        let response_stream = futures_util::stream::unfold(rx, |mut rx| async move {
+            match rx.recv().await {
+                Some(item) => Some((item, rx)),
+                None => None,
+            }
+        });
+
+        Box::pin(response_stream)
+    }
+}
+
+// ==========================================
+// GROQ PROVIDER (LPU Inference API)
+// ==========================================
+pub struct GroqProvider {
+    api_key: String,
+    model: String,
+    system_prompt: Option<String>,
+}
+
+impl GroqProvider {
+    pub fn new(api_key: String, model: Option<String>, system_prompt: Option<String>) -> Self {
+        Self {
+            api_key,
+            model: model.unwrap_or_else(|| "llama-3.1-70b-versatile".to_string()),
+            system_prompt,
+        }
+    }
+}
+
+impl AiProvider for GroqProvider {
+    fn stream_chat(&self, history: &[ChatMessage]) -> BoxStream<Result<String, String>> {
+        let api_key = self.api_key.clone();
+        let model = self.model.clone();
+        let system_prompt = self.system_prompt.clone();
+        let history = history.to_vec();
+        let (tx, rx) = mpsc::channel(100);
+
+        tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            let url = "https://api.groq.com/openai/v1/chat/completions";
+
+            let mut messages: Vec<serde_json::Value> = Vec::new();
+            if let Some(ref sys) = system_prompt {
+                if !sys.trim().is_empty() {
+                    messages.push(serde_json::json!({
+                        "role": "system",
+                        "content": sys
+                    }));
+                }
+            }
+
+            for msg in history.iter() {
+                let model_lower = model.to_lowercase();
+                let is_vision_model = model_lower.contains("vision") || model_lower.contains("vl") || model_lower.contains("qwen") || model_lower.contains("llava");
+
+                if is_vision_model {
+                    if let Some(ref img) = msg.image_base64 {
+                        if !img.is_empty() {
+                            let content_array = serde_json::json!([
+                                { "type": "text", "text": &msg.content },
+                                {
+                                    "type": "image_url",
+                                    "image_url": { "url": format!("data:image/jpeg;base64,{}", img), "detail": "auto" }
+                                }
+                            ]);
+                            messages.push(serde_json::json!({
+                                "role": msg.role,
+                                "content": content_array
+                            }));
+                            continue;
+                        }
+                    }
+                }
+                messages.push(serde_json::json!({
+                    "role": msg.role,
+                    "content": msg.content
+                }));
+            }
+
+            let mut body = serde_json::json!({
+                "model": model,
+                "messages": messages,
+                "stream": true
+            });
+
+            let mut attempts = 0;
+            let max_attempts = 3;
+
+            let res = loop {
+                attempts += 1;
+                let request_res = client
+                    .post(url)
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .json(&body)
+                    .send()
+                    .await;
+
+                match request_res {
+                    Ok(response) => {
+                        let status = response.status();
+                        if status.is_success() {
+                            break response;
+                        }
+
+                        let err_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+
+                        // Handle 503 (Over Capacity) retry with exponential backoff
+                        if (status.as_u16() == 503 || status.as_u16() == 429) && attempts < max_attempts {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(1200 * attempts as u64)).await;
+                            continue;
+                        }
+
+                        // Handle 413 / 429 payload size or token limit by stripping images from old history
+                        if (status.as_u16() == 413 || err_text.contains("tokens") || err_text.contains("Request too large")) && attempts < max_attempts {
+                            if let Some(msg_list) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
+                                for msg in msg_list.iter_mut() {
+                                    if let Some(content_arr) = msg.get_mut("content").and_then(|c| c.as_array_mut()) {
+                                        content_arr.retain(|item| item.get("type").and_then(|t| t.as_str()) == Some("text"));
+                                    }
+                                }
+                            }
+                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                            continue;
+                        }
+
+                        let user_friendly_msg = if status.as_u16() == 503 || err_text.contains("over capacity") {
+                            format!("Groq model `{}` is currently over capacity. Please wait a few seconds and try again.", model)
+                        } else if status.as_u16() == 413 || err_text.contains("tokens") || err_text.contains("Payload Too Large") {
+                            format!("Groq token limit reached (8000 TPM limit). Try clearing chat history or using Gemini in Settings.")
+                        } else {
+                            format!("Groq API error ({}): {}", status, err_text)
+                        };
+
+                        let _ = tx.send(Err(user_friendly_msg)).await;
+                        return;
+                    }
+                    Err(e) => {
+                        if attempts < max_attempts {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                            continue;
+                        }
+                        let _ = tx.send(Err(format!("Groq network error: {}", e))).await;
+                        return;
+                    }
+                }
+            };
 
             let mut stream = res.bytes_stream();
             let mut buffer = String::new();
@@ -499,6 +706,28 @@ impl AiProvider for AnthropicProvider {
             let mut messages: Vec<serde_json::Value> = Vec::new();
             for msg in history.iter() {
                 let role = if msg.role == "assistant" { "assistant" } else { "user" };
+
+                if let Some(ref img) = msg.image_base64 {
+                    if !img.is_empty() {
+                        let content_array = serde_json::json!([
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": img
+                                }
+                            },
+                            { "type": "text", "text": &msg.content }
+                        ]);
+                        messages.push(serde_json::json!({
+                            "role": role,
+                            "content": content_array
+                        }));
+                        continue;
+                    }
+                }
+
                 messages.push(serde_json::json!({
                     "role": role,
                     "content": msg.content

@@ -123,6 +123,56 @@ interface DbMessage {
   created_at: string;
 }
 
+// Helper to compress/downscale base64 images before sending to LLM APIs (Prevents 413 Payload Too Large)
+async function compressBase64Image(base64Str: string, maxWidth = 640): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = `data:image/jpeg;base64,${base64Str}`;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        // Reduce quality to 0.45 for ultra-compact payload (~12KB / ~2,500 tokens) to fit Groq 8000 TPM limits
+        const compressed = canvas.toDataURL("image/jpeg", 0.45).split(",")[1];
+        resolve(compressed);
+      } else {
+        resolve(base64Str);
+      }
+    };
+    img.onerror = () => resolve(base64Str);
+  });
+}
+
+// Stable reference to markdown components to prevent React from unmounting <details> during streaming
+const stableMarkdownComponents = {
+  code({ inline, className, children, ...props }: any) {
+    const match = /language-(\w+)/.exec(className || '');
+    if (!inline && match && match[1] === 'automation') {
+      return null;
+    }
+    if (!inline && match && match[1] === 'think') {
+      return (
+        <details className="think-details" style={{ marginBottom: "1rem", opacity: 0.85, cursor: "pointer" }}>
+          <summary style={{ fontWeight: "bold", fontSize: "0.85em", userSelect: "none", color: "#a1a1aa" }}>💭 Thinking Process</summary>
+          <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.85em", marginTop: "0.5rem", padding: "0.5rem", background: "rgba(0,0,0,0.5)", borderRadius: "4px", border: "1px solid var(--border-color)", cursor: "text", color: "#e4e4e7" }}>
+            <code {...props}>{children}</code>
+          </pre>
+        </details>
+      );
+    }
+    return <code className={className} {...props}>{children}</code>;
+  }
+};
+
 function App() {
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -140,6 +190,12 @@ function App() {
   const [voiceActive, _setVoiceActive] = useState(true); // If background listening is enabled
   const [voiceState, setVoiceState] = useState<"standby" | "dictating" | "speaking">("standby");
   const voiceStateRef = useRef(voiceState);
+  const isPttHoldingRef = useRef(false);
+  const latestTranscriptRef = useRef("");
+
+  useEffect(() => {
+    voiceStateRef.current = voiceState;
+  }, [voiceState]);
 
   // Screen Capture States
   const [attachedImage, setAttachedImage] = useState<string | null>(null); // Holds the base64 screenshot text
@@ -402,6 +458,8 @@ function App() {
   // API Keys & Custom Model Setup States
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem("vyze_gemini_api_key") || "");
   const [geminiModel, setGeminiModel] = useState<string>(() => localStorage.getItem("vyze_gemini_model") || "");
+  const [groqApiKey, setGroqApiKey] = useState<string>(() => localStorage.getItem("vyze_groq_api_key") || "");
+  const [groqModel, setGroqModel] = useState<string>(() => localStorage.getItem("vyze_groq_model") || "");
 
   const [openaiApiKey, setOpenaiApiKey] = useState<string>(() => localStorage.getItem("vyze_openai_api_key") || "");
   const [openaiModel, setOpenaiModel] = useState<string>(() => localStorage.getItem("vyze_openai_model") || "");
@@ -1037,6 +1095,16 @@ function App() {
   }, [geminiModel]);
 
   useEffect(() => {
+    localStorage.setItem("vyze_groq_api_key", groqApiKey);
+    invoke("db_set_setting", { key: "groq_api_key", value: groqApiKey }).catch(console.error);
+  }, [groqApiKey]);
+
+  useEffect(() => {
+    localStorage.setItem("vyze_groq_model", groqModel);
+    invoke("db_set_setting", { key: "groq_model", value: groqModel }).catch(console.error);
+  }, [groqModel]);
+
+  useEffect(() => {
     localStorage.setItem("vyze_openai_api_key", openaiApiKey);
     invoke("db_set_setting", { key: "openai_api_key", value: openaiApiKey }).catch(console.error);
   }, [openaiApiKey]);
@@ -1482,30 +1550,72 @@ function App() {
         console.error("Failed to start standby recognition:", e);
       }
     } else if (voiceState === "dictating") {
-      // Short-session prompt dictation
+      // Prompt dictation using Web Speech API (Shared by Wake-Word & Push-To-Talk)
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      recognition.continuous = true; // Stay listening continuously while PTT keys are held or speaking
       recognition.interimResults = true;
       recognition.lang = "en-US";
 
+      latestTranscriptRef.current = "";
+      let silenceTimer: any = null;
+
       recognition.onresult = (event: any) => {
         if (voiceStateRef.current !== "dictating") return;
-        const results = event.results;
-        const lastResult = results[results.length - 1];
-        const transcript = lastResult[0].transcript;
-        setPrompt(transcript);
+
+        // Loop through all speech results to concatenate the entire transcript across pauses
+        let fullTranscript = "";
+        for (let i = 0; i < event.results.length; ++i) {
+          fullTranscript += event.results[i][0].transcript;
+        }
+
+        const cleanTranscript = fullTranscript.trim();
+        latestTranscriptRef.current = cleanTranscript;
+        setPrompt(cleanTranscript);
+
+        // In Wake-Word mode (not holding PTT), auto-submit after 1.4s of natural sentence silence
+        if (!isPttHoldingRef.current) {
+          if (silenceTimer) clearTimeout(silenceTimer);
+          silenceTimer = setTimeout(() => {
+            if (voiceStateRef.current === "dictating" && !isPttHoldingRef.current) {
+              const text = latestTranscriptRef.current.trim();
+              if (text) {
+                handleVoiceSubmit(text);
+              }
+            }
+          }, 1400);
+        }
       };
 
       recognition.onerror = (err: any) => {
         console.warn("Dictation speech recognition error:", err.error);
-        if (voiceStateRef.current === "dictating") {
+        if (voiceStateRef.current === "dictating" && !isPttHoldingRef.current) {
           setVoiceState("standby");
         }
       };
 
       recognition.onend = () => {
+        if (silenceTimer) clearTimeout(silenceTimer);
         if (voiceStateRef.current !== "dictating") return;
-        handleVoiceSubmit();
+
+        // If user is still physically holding PTT keys, restart speech recognition immediately!
+        if (isPttHoldingRef.current) {
+          try {
+            recognition.start();
+          } catch (e) {
+            setTimeout(() => {
+              if (voiceStateRef.current === "dictating" && isPttHoldingRef.current) {
+                try { recognition.start(); } catch (e) {}
+              }
+            }, 50);
+          }
+        } else {
+          const text = latestTranscriptRef.current.trim();
+          if (text) {
+            handleVoiceSubmit(text);
+          } else {
+            setVoiceState("standby");
+          }
+        }
       };
 
       try {
@@ -1529,37 +1639,26 @@ function App() {
     };
   }, [voiceState, voiceActive]);
 
-  // Native WASAPI Voice Dictation handler
-  async function handleToggleVoice() {
+  // Unified Voice Dictation handler (for UI mic button)
+  function handleToggleVoice() {
     if (voiceState === "speaking") {
       stopSpeaking();
       return;
     }
 
     if (voiceState === "dictating") {
-      setVoiceState("standby");
-      try {
-        setIsLoading(true);
-        const transcribedText = await invoke<string>("stop_voice_recording");
-        if (transcribedText.trim()) {
-          setPrompt((prev) => (prev ? `${prev} ${transcribedText.trim()}` : transcribedText.trim()));
-          playBeep();
-        }
-      } catch (err) {
-        console.error("Voice transcription failed:", err);
-      } finally {
-        setIsLoading(false);
-      }
+      handleVoiceSubmit();
     } else {
-      try {
-        await invoke("start_voice_recording");
-        setVoiceState("dictating");
-        playBeep();
-      } catch (err) {
-        console.error("Failed to start native recording:", err);
-      }
+      setVoiceState("dictating");
+      playBeep();
     }
   }
+
+  // Keep a stable ref to the latest triggerSubmit to avoid stale closures in native event listeners
+  const triggerSubmitRef = useRef(triggerSubmit);
+  useEffect(() => {
+    triggerSubmitRef.current = triggerSubmit;
+  }, [triggerSubmit]);
 
   // 1. Listen for the global selection, silent screen capture events, and timers from Rust
   useEffect(() => {
@@ -1583,11 +1682,13 @@ function App() {
       unsubscribes.push(u1);
 
       // Listen for silent auto screen capture complete
-      const u2 = await listen<string>("auto-screen-captured", (event) => {
+      const u2 = await listen<string>("auto-screen-captured", async (event) => {
         if (!active) return;
         const base64 = event.payload;
         if (base64) {
-          setAttachedImage(base64);
+          const compressed = await compressBase64Image(base64);
+          if (!active) return;
+          setAttachedImage(compressed);
           playBeep(); // Beep to signal that the hidden capture succeeded!
         }
       });
@@ -1613,6 +1714,28 @@ function App() {
         setActiveTimers((prev) => prev.filter((t) => t.id !== id));
       });
       unsubscribes.push(u3);
+
+      // Listen for Push-To-Talk start event
+      const u_ptt_start = await listen("ptt-start", () => {
+        if (!active) return;
+        isPttHoldingRef.current = true;
+        playBeep();
+        if (voiceStateRef.current !== "dictating") {
+          setVoiceState("dictating");
+        }
+      });
+      unsubscribes.push(u_ptt_start);
+
+      // Listen for Push-To-Talk stop event
+      const u_ptt_stop = await listen("ptt-stop", () => {
+        if (!active) return;
+        isPttHoldingRef.current = false;
+        if (voiceStateRef.current === "dictating") {
+          const finalPrompt = latestTranscriptRef.current.trim() || prompt.trim();
+          handleVoiceSubmit(finalPrompt);
+        }
+      });
+      unsubscribes.push(u_ptt_stop);
 
       // Listen for RAG ingestion progress events
       const u4 = await listen<any>("rag-progress", (event) => {
@@ -1903,7 +2026,13 @@ function App() {
 
       // Read response aloud if voice narration is active
       if (voiceNarration) {
-        speakText(fullResponse);
+        // Strip <think>...</think> blocks from spoken text so it doesn't narrate the reasoning process
+        const spokenText = fullResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        if (spokenText) {
+          speakText(spokenText);
+        } else {
+          setVoiceState("standby");
+        }
       } else {
         setVoiceState("standby");
       }
@@ -1930,7 +2059,8 @@ function App() {
     try {
       // Call the Rust function we wrote to take a screenshot
       const base64Screenshot = await invoke<string>("capture_active_screen");
-      setAttachedImage(base64Screenshot);
+      const compressed = await compressBase64Image(base64Screenshot);
+      setAttachedImage(compressed);
       playBeep(); // Play a nice tactical chirp when captured successfully
     } catch (err) {
       console.error("Screen capture failed:", err);
@@ -1954,14 +2084,13 @@ function App() {
 
 
   // Voice dictation submit trigger
-  function handleVoiceSubmit() {
+  function handleVoiceSubmit(explicitText?: string) {
     setVoiceState("standby");
-    setPrompt((currentPrompt) => {
-      if (currentPrompt.trim()) {
-        triggerSubmit(currentPrompt);
-      }
-      return ""; // clear prompt
-    });
+    const currentPrompt = (explicitText !== undefined ? explicitText : prompt).trim();
+    setPrompt(""); 
+    if (currentPrompt) {
+      triggerSubmit(currentPrompt);
+    }
   }
 
   // Handle uploading images or text documents
@@ -1972,10 +2101,11 @@ function App() {
     const reader = new FileReader();
 
     if (file.type.startsWith("image/")) {
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const result = event.target?.result as string;
         const base64 = result.split(",")[1];
-        setAttachedImage(base64);
+        const compressed = await compressBase64Image(base64);
+        setAttachedImage(compressed);
         playBeep();
       };
       reader.readAsDataURL(file);
@@ -2172,6 +2302,7 @@ function App() {
                   onChange={(e) => setDefaultProvider(e.target.value)}
                 >
                   <option value="gemini">Google Gemini</option>
+                  <option value="groq">Groq (Fast Inference)</option>
                   <option value="openai">OpenAI (ChatGPT)</option>
                   <option value="anthropic">Anthropic (Claude)</option>
                   <option value="ollama">Local Ollama</option>
@@ -2200,6 +2331,29 @@ function App() {
                       value={geminiModel}
                       onKeyDown={(e) => e.stopPropagation()}
                       onChange={(e) => setGeminiModel(e.target.value)}
+                      style={{ width: "95px", fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Groq Setup */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "6px" }}>
+                  <label className="select-setting-label" style={{ fontSize: "0.65em" }}>Groq API Key / Model:</label>
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    <input
+                      type="password"
+                      placeholder="Paste Groq API Key..."
+                      value={groqApiKey}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setGroqApiKey(e.target.value)}
+                      style={{ flex: 1, fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="e.g. llama-3.1-70b-versatile"
+                      value={groqModel}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setGroqModel(e.target.value)}
                       style={{ width: "95px", fontSize: "0.7em", padding: "2px 4px", background: "var(--bg-input)", color: "var(--fg-main)", border: "1px solid var(--border-color)", borderRadius: "2px" }}
                     />
                   </div>
@@ -2553,6 +2707,7 @@ function App() {
                 disabled={isLoading}
               >
                 <option value="gemini">Gemini</option>
+                <option value="groq">Groq</option>
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Claude</option>
                 <option value="ollama">Ollama</option>
@@ -2702,17 +2857,11 @@ function App() {
                     ) : (
                       <>
                         <ReactMarkdown
-                          components={{
-                            code({ inline, className, children, ...props }) {
-                              const match = /language-(\w+)/.exec(className || '');
-                              if (!inline && match && match[1] === 'automation') {
-                                return null;
-                              }
-                              return <code className={className} {...props}>{children}</code>;
-                            }
-                          }}
+                          components={stableMarkdownComponents}
                         >
-                          {msg.content}
+                          {msg.content
+                            .replace(/<think>[\r\n]*/g, '```think\n')
+                            .replace(/<\/think>[\r\n]*/g, '\n```\n\n')}
                         </ReactMarkdown>
                         {msg.role === "assistant" && (() => {
                           const runnableCmd = getRunnableTerminalCommand(msg.content);
@@ -2807,7 +2956,7 @@ function App() {
               className="prompt-input"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={provider === "gemini" ? "Ask Gemini..." : "Ask Ollama..."}
+              placeholder={`Ask ${provider.charAt(0).toUpperCase() + provider.slice(1)}...`}
               disabled={isLoading || voiceState === "speaking"}
             />
             {/* Hidden file input */}
