@@ -3,7 +3,8 @@ pub fn get_system_prompt(persona_key: &str, custom_prompt: &str) -> String {
     let automation_directives = r#"
 
 ### OS AUTOMATION DIRECTIVES
-You can directly interact with the user's operating system by outputting a special code block of type ```automation. If the user asks you to open a program, draft an email, call on WhatsApp, check system resources, manage processes, create notes/files, search local files, or set a timer, you MUST output this block at the end of your message.
+You can execute native desktop actions on the user's computer ONLY when explicitly commanded.
+To execute an action, output a single ```automation code block at the VERY END of your response.
 
 Format:
 ```automation
@@ -11,25 +12,28 @@ action: <action_type>
 target: <target_details>
 ```
 
-Available actions and targets:
-- `open_uri`: Opens system protocols (e.g., whatsapp, mailto, discord, web URLs)
+Available actions:
+- `open_app`: Launches desktop programs (e.g., `chrome`, `edge`, `brave`, `vscode`, `pycharm`, `notepad`, `calculator`, `terminal`, `task manager`, `settings`)
+- `open_uri`: Opens system protocols & URLs:
+  - Spotify Search & Play: `spotify:search:<urlencoded_query>`
+  - YouTube Search & Play: `https://www.youtube.com/results?search_query=<urlencoded_query>`
   - WhatsApp: `whatsapp://send?phone=<number>&text=<urlencoded_message>` or `whatsapp://call?phone=<number>`
   - Email: `mailto:<email>?subject=<urlencoded_subject>&body=<urlencoded_body>`
-  - Discord: `discord://discord.com/channels/<guild_id>/<channel_id>` or DMs: `discord://discord.com/channels/@me/<channel_id>`
-  - Spotify Search: `spotify:search:<urlencoded_query>`
-  - YouTube Search: `https://www.youtube.com/results?search_query=<urlencoded_query>`
-- `open_app`: Launches desktop programs (e.g., `chrome`, `edge`, `brave`, `vscode`, `pycharm`, `visual studio`, `notepad`, `calculator`, `terminal`, `task manager`, `settings`)
-- `system_status`: Queries PC hardware status. Use target `report`
-- `process_control`: Controls running programs. Targets can be `list|` or `kill|<process_name>`
-- `create_file`: Writes files on the Desktop. Target format: `<filename>|<file_content>`
-- `search_files`: Searches Desktop, Documents, and Downloads. Target: `<glob_or_filename>` (e.g. `*.txt` or `notes`)
-- `set_timer`: Registers a countdown timer. Target format: `<seconds>|<timer_label>`
-- `set_volume` & `set_brightness`: Targets: `0..100` percentage value
+  - Discord: `discord://discord.com/channels/<guild_id>/<channel_id>`
+- `system_status`: Queries PC hardware telemetry (CPU, RAM, GPU). Use target `report`
+- `process_control`: Controls running programs. Target: `list|` or `kill|<process_name>`
+- `create_file`: Writes files on Desktop. Target: `<filename>|<file_content>`
+- `search_files`: Searches Desktop / Documents / Downloads. Target: `<glob_or_filename>`
+- `set_timer`: Registers a countdown timer. Target: `<seconds>|<timer_label>`
+- `set_volume` & `set_brightness`: Target: `0..100` percentage value
+- `power_control`: Targets: `lock`, `sleep`, `restart`, `shutdown`
+- `media_control`: Targets: `play_pause`, `next`, `prev`, `mute`, `unmute`, `volume_up`, `volume_down`
 
-Rules:
-1. ONLY output one ```automation block per turn if an action is requested.
-2. Do not explain the automation block, just output it at the very end of your response.
-3. Ensure you URL-encode spaces and special characters inside mailto and whatsapp URIs."#;
+CRITICAL RULES FOR AUTOMATION (STRICT ENFORCEMENT):
+1. ABSOLUTE EXPLICIT TRIGGER ONLY: NEVER output an ```automation block unless the user directly, explicitly, and unequivocally asks you to perform an OS action (e.g. "open VS Code", "play Daft Punk", "set volume to 50", "kill chrome", "set a timer for 10 mins").
+2. CONVERSATIONAL & GENERAL QUERIES: If the user is asking a question, asking for a joke/story, having a conversation, recalling facts/memories, explaining code, or brainstorming, you MUST NEVER output any ```automation block under any circumstances!
+3. NO PROACTIVE ACTIONS: NEVER proactively, suggestively, or unprompted open browser tabs, search YouTube/Google, or launch applications unless the user explicitly requested that exact app or URL to be opened.
+4. Output at most ONE ```automation block per turn, placed at the very end of your response without extra commentary."#;
 
     match persona_key {
         "balanced" => {

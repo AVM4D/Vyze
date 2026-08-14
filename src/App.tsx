@@ -619,12 +619,32 @@ function App() {
     }
   }
 
-  function getRunnableAutomationAction(content: string): AutomationAction | null {
+  function isUserPromptActionOriented(promptText: string): boolean {
+    if (!promptText) return true;
+    const p = promptText.toLowerCase().trim();
+    const actionKeywords = [
+      "open", "launch", "start", "run", "play", "pause", "resume", "stop", "next", "previous", "mute", "unmute",
+      "kill", "terminate", "close", "set", "adjust", "change", "turn", "increase", "decrease",
+      "timer", "remind", "reminder", "alarm", "create file", "make file", "create note", "make note",
+      "search files", "find files", "search file", "find file", "search for file", "search on youtube", "search youtube",
+      "search spotify", "play on spotify", "play spotify", "whatsapp", "email", "mailto", "gmail", "send email", "send message",
+      "system status", "telemetry", "hardware", "cpu", "ram", "gpu", "battery", "lock", "sleep", "restart", "shutdown"
+    ];
+    return actionKeywords.some((kw) => p.includes(kw));
+  }
+
+  function getRunnableAutomationAction(content: string, userPrompt?: string): AutomationAction | null {
     if (!content) return null;
 
     // 1. Direct Code Block Match: ```automation ... ```
     const match = /```automation\s*\n?([\s\S]*?)```/i.exec(content);
     if (match && match[1]) {
+      // If userPrompt is supplied, guard against unprompted LLM hallucinated actions for conversational questions
+      if (userPrompt && !isUserPromptActionOriented(userPrompt)) {
+        console.warn("Suppressed unprompted hallucinated automation block for conversational prompt:", userPrompt);
+        return null;
+      }
+
       const lines = match[1].split("\n");
       let action = "";
       let target = "";
@@ -2021,7 +2041,7 @@ function App() {
       }
 
       // Auto-execute OS desktop automation immediately if detected!
-      const autoAction = getRunnableAutomationAction(fullResponse);
+      const autoAction = getRunnableAutomationAction(fullResponse, currentPrompt);
       if (autoAction) {
         handleRunAutomation(autoAction.action, autoAction.target);
       }
