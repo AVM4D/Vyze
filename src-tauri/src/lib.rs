@@ -1175,7 +1175,7 @@ pub fn run() {
 
             app.global_shortcut().register(ctrl_space)?;
 
-            // 3. Hardware Physical Key Monitor for Push-To-Talk (Supports Alt+V [Voice] & Ctrl+Shift+Space)
+            // 3. Hardware Physical Key Monitor for Push-To-Talk (Exclusively Ctrl+Shift+Space)
             #[cfg(windows)]
             {
                 let app_handle = app.handle().clone();
@@ -1186,16 +1186,13 @@ pub fn run() {
                     loop {
                         tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
 
-                        // 0x12 is VK_MENU (Alt), 0x56 is VK_V ('V' for Voice)
-                        // 0x11 is VK_CONTROL (Ctrl), 0x10 is VK_SHIFT (Shift), 0x20 is VK_SPACE (Space)
-                        let is_alt = unsafe { (GetAsyncKeyState(0x12) as u16 & 0x8000) != 0 };
-                        let is_v = unsafe { (GetAsyncKeyState(0x56) as u16 & 0x8000) != 0 };
+                        // 0x11 = VK_CONTROL (Ctrl), 0x10 = VK_SHIFT (Shift), 0x20 = VK_SPACE (Space)
                         let is_ctrl = unsafe { (GetAsyncKeyState(0x11) as u16 & 0x8000) != 0 };
                         let is_shift = unsafe { (GetAsyncKeyState(0x10) as u16 & 0x8000) != 0 };
                         let is_space = unsafe { (GetAsyncKeyState(0x20) as u16 & 0x8000) != 0 };
                         
-                        // Supports Alt+V (Voice) or Ctrl+Shift+Space — completely free from Windows and GPU software conflicts
-                        let is_holding = (is_alt && is_v) || (is_ctrl && is_shift && is_space);
+                        // Exclusively Ctrl+Shift+Space (modifier-only, zero-character leak)
+                        let is_holding = is_ctrl && is_shift && is_space;
 
                         if is_holding && !was_holding {
                             was_holding = true;

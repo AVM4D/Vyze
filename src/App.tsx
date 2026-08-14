@@ -1719,6 +1719,8 @@ function App() {
       const u_ptt_start = await listen("ptt-start", () => {
         if (!active) return;
         isPttHoldingRef.current = true;
+        latestTranscriptRef.current = "";
+        setPrompt(""); // Clean prompt buffer immediately so no stray key character leaks
         playBeep();
         if (voiceStateRef.current !== "dictating") {
           setVoiceState("dictating");
