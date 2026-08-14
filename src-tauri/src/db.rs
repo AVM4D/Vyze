@@ -349,13 +349,74 @@ impl DbManager {
         Ok(candidates.into_iter().map(|(_, res)| res).collect())
     }
 
-    // Fallback search
+    // Keyword-aware and Full-Text Search fallback across past sessions
     pub fn search_past_context(
         &self,
         current_session_id: &str,
-        _query: &str,
+        query: &str,
     ) -> Result<Vec<SearchResult>> {
         let conn = self.get_connection()?;
+
+        // Extract meaningful keywords (length >= 3, excluding common stop words)
+        let words: Vec<&str> = query
+            .split_whitespace()
+            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
+            .filter(|w| {
+                let lower = w.to_lowercase();
+                w.len() >= 3
+                    && ![
+                        "the", "and", "you", "for", "what", "how", "why", "who", "where",
+                        "remember", "recall", "tell", "say", "know",
+                    ]
+                    .contains(&lower.as_str())
+            })
+            .collect();
+
+        if !words.is_empty() {
+            // 1. Keyword LIKE query matching relevant words
+            let mut like_clauses = Vec::new();
+            let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+            params_vec.push(Box::new(current_session_id.to_string()));
+
+            for word in &words {
+                like_clauses.push("LOWER(m.content) LIKE ?");
+                params_vec.push(Box::new(format!("%{}%", word.to_lowercase())));
+            }
+
+            let sql = format!(
+                "SELECT m.session_id, s.title, m.role, m.content, m.created_at
+                 FROM messages m
+                 JOIN sessions s ON m.session_id = s.id
+                 WHERE m.session_id != ?1 AND m.content != '' AND ({})
+                 ORDER BY m.id DESC
+                 LIMIT 8",
+                like_clauses.join(" OR ")
+            );
+
+            let params_slice: Vec<&dyn rusqlite::ToSql> =
+                params_vec.iter().map(|b| b.as_ref()).collect();
+            if let Ok(mut stmt) = conn.prepare(&sql) {
+                if let Ok(iter) = stmt.query_map(&params_slice[..], |row| {
+                    Ok(SearchResult {
+                        session_id: row.get(0)?,
+                        session_title: row.get(1)?,
+                        role: row.get(2)?,
+                        content: row.get(3)?,
+                        created_at: row.get(4)?,
+                    })
+                }) {
+                    let mut results = Vec::new();
+                    for r in iter.flatten() {
+                        results.push(r);
+                    }
+                    if !results.is_empty() {
+                        return Ok(results);
+                    }
+                }
+            }
+        }
+
+        // 2. Recent general messages fallback
         let mut stmt = conn.prepare(
             "SELECT m.session_id, s.title, m.role, m.content, m.created_at
              FROM messages m
@@ -376,10 +437,8 @@ impl DbManager {
         })?;
 
         let mut results = Vec::new();
-        for r in iter {
-            if let Ok(res) = r {
-                results.push(res);
-            }
+        for r in iter.flatten() {
+            results.push(r);
         }
         Ok(results)
     }

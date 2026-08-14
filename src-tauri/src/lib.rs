@@ -123,8 +123,16 @@ async fn ask_vyze(
             "past",
             "chat",
             "prev",
+            "previous",
             "yesterday",
             "look up",
+            "favorite",
+            "favourite",
+            "my",
+            "what was",
+            "what is my",
+            "did i say",
+            "did i tell",
         ];
         let is_memory_query = triggers.iter().any(|t| prompt_lower.contains(t));
 

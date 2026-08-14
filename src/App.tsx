@@ -2041,7 +2041,7 @@ function App() {
       }
 
       // Auto-execute OS desktop automation immediately if detected!
-      const autoAction = getRunnableAutomationAction(fullResponse, currentPrompt);
+      const autoAction = getRunnableAutomationAction(fullResponse, promptText);
       if (autoAction) {
         handleRunAutomation(autoAction.action, autoAction.target);
       }
