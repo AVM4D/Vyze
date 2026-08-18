@@ -34,12 +34,14 @@ import logoPink from "./assets/pink.png";
 import logoCyan from "./assets/cyan.png";
 import logoPurple from "./assets/purple.png";
 import logoGrey from "./assets/grey.png";
+import logoWhite from "./assets/white.png";
 
 const themeLogos: Record<string, string> = {
   "retro-pink": logoPink,
   cyberpunk: logoCyan,
   dracula: logoPurple,
   monochrome: logoGrey,
+  arle: logoWhite,
 };
 
 import think1 from "./assets/character/think1.png";
@@ -303,6 +305,9 @@ function App() {
   const [voiceRate, setVoiceRate] = useState<number>(() => {
     return parseFloat(localStorage.getItem("vyze_voice_rate") || "1.0");
   });
+  const [vyzeVolume, setVyzeVolume] = useState<number>(() => {
+    return parseFloat(localStorage.getItem("vyze_volume") || "1.0");
+  });
 
   // Unified Attachment Popover Menu State
   const attachMenuRef = useRef<HTMLDivElement>(null);
@@ -350,11 +355,17 @@ function App() {
     invoke("db_set_setting", { key: "voice_rate", value: String(voiceRate) }).catch(console.error);
   }, [voiceRate]);
 
+  useEffect(() => {
+    localStorage.setItem("vyze_volume", String(vyzeVolume));
+    invoke("db_set_setting", { key: "vyze_volume", value: String(vyzeVolume) }).catch(console.error);
+  }, [vyzeVolume]);
+
   const handleTestVoicePreview = () => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const sampleText = "Hello! I am Vyze. Here is how your selected voice sounds.";
     const utterance = new SpeechSynthesisUtterance(sampleText);
+    utterance.volume = vyzeVolume;
     utterance.rate = voiceRate;
 
     const systemVoices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
@@ -736,12 +747,12 @@ function App() {
         const email = emailMatch[1];
         let subject = "Vyze Draft";
         let body = "";
-        
+
         // Match subject cleanly by terminating at "body" or "saying" or end
         const subjectMatch = /subject\s+(.+?)(?:\s+(?:and\s+)?body\s+|\s+saying\s+|$)/i.exec(promptText);
         const bodyMatch = /body\s+(.+)/i.exec(promptText);
         const sayingMatch = /saying\s+(.+)/i.exec(promptText);
-        
+
         if (subjectMatch) {
           subject = subjectMatch[1].trim();
           // Remove trailing connector words if present
@@ -752,10 +763,10 @@ function App() {
         } else if (sayingMatch) {
           body = sayingMatch[1].trim();
         }
-        
+
         let uriTarget = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         let label = `drafting email to ${email}...`;
-        
+
         if (clean.includes("gmail")) {
           uriTarget = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
           label = `opening Gmail in browser to draft email to ${email}...`;
@@ -807,7 +818,7 @@ function App() {
         let multiplier = 1;
         if (unit.startsWith("min")) multiplier = 60;
         else if (unit.startsWith("hour") || unit.startsWith("hr")) multiplier = 3600;
-        
+
         const totalSecs = val * multiplier;
         return {
           action: "set_timer",
@@ -815,7 +826,7 @@ function App() {
           label: `setting reminder for '${label}' in ${val} ${unit}...`
         };
       }
-      
+
       const timerMatch = /(?:set\s+a?\s*timer\s+(?:for|of)?\s*)?(\d+)\s*(hour|minute|second|min|sec|hr)s?\s*(?:called|for|named)?\s*(.*)/i.exec(promptText);
       if (timerMatch) {
         const val = parseInt(timerMatch[1], 10);
@@ -824,7 +835,7 @@ function App() {
         let multiplier = 1;
         if (unit.startsWith("min")) multiplier = 60;
         else if (unit.startsWith("hour") || unit.startsWith("hr")) multiplier = 3600;
-        
+
         const totalSecs = val * multiplier;
         return {
           action: "set_timer",
@@ -1362,7 +1373,7 @@ function App() {
       gain.connect(ctx.destination);
       osc.type = "sine";
       osc.frequency.setValueAtTime(520, ctx.currentTime);
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.setValueAtTime(0.08 * vyzeVolume, ctx.currentTime);
       osc.start();
       osc.stop(ctx.currentTime + 0.12);
     } catch (e) {
@@ -1411,7 +1422,7 @@ function App() {
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     activeUtteranceRef.current = utterance;
-    utterance.volume = 1.0;
+    utterance.volume = vyzeVolume;
     utterance.rate = voiceRate;
 
     // Find the voice selected by the user or fallback to system default
@@ -1624,7 +1635,7 @@ function App() {
           } catch (e) {
             setTimeout(() => {
               if (voiceStateRef.current === "dictating" && isPttHoldingRef.current) {
-                try { recognition.start(); } catch (e) {}
+                try { recognition.start(); } catch (e) { }
               }
             }, 50);
           }
@@ -1764,7 +1775,7 @@ function App() {
         if (!active) return;
         const payload = event.payload;
         setRagProgress(payload);
-        
+
         if (payload.status === "complete") {
           playBeep();
           const currentSid = activeSessionIdRef.current;
@@ -1889,7 +1900,7 @@ function App() {
         triggerHappyBurst();
 
         let responseContent = (res && res !== "Execution successful" && res !== "URI opened successfully" && !res.startsWith("Launched")) ? res : `✓ ${promptAction.label.replace("...", "")}`;
-        
+
         if (promptAction.action === "set_timer") {
           try {
             const timerData = JSON.parse(res);
@@ -2109,7 +2120,7 @@ function App() {
   function handleVoiceSubmit(explicitText?: string) {
     setVoiceState("standby");
     const currentPrompt = (explicitText !== undefined ? explicitText : prompt).trim();
-    setPrompt(""); 
+    setPrompt("");
     if (currentPrompt) {
       triggerSubmit(currentPrompt);
     }
@@ -2552,6 +2563,20 @@ function App() {
               </div>
 
               <div className="settings-option" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                <label className="select-setting-label">Vyze Volume ({Math.round(vyzeVolume * 100)}%):</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  className="voice-range-slider"
+                  value={vyzeVolume}
+                  onChange={(e) => setVyzeVolume(parseFloat(e.target.value))}
+                  style={{ width: "130px" }}
+                />
+              </div>
+
+              <div className="settings-option" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
                 <label className="select-setting-label">Pitch ({voicePitch.toFixed(2)}):</label>
                 <input
                   type="range"
@@ -2676,6 +2701,7 @@ function App() {
                   <option value="cyberpunk">Cyberpunk</option>
                   <option value="dracula">Dracula</option>
                   <option value="monochrome">Monochrome</option>
+                  <option value="arle">Arle</option>
                 </select>
               </div>
               <button

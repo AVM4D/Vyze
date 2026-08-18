@@ -171,6 +171,36 @@
   --checkbox-checked-bg: #ffffff;
 }
 
+.hud-container.theme-arle {
+  --primary-color: #dc2626;
+  /* Crimson Red */
+  --secondary-color: #ffffff;
+  /* Pure White */
+  --bg-card: #222226;
+  /* Lighter Dark Charcoal Black */
+  --bg-input: #18181c;
+  /* Soft Dark Charcoal */
+  --border-color: #451a23;
+  /* Dark Crimson Border */
+  --text-color: #ffffff;
+  --user-bubble-bg: #dc2626;
+  --user-bubble-fg: #ffffff;
+  --assistant-bubble-bg: #ffffff;
+  --assistant-bubble-fg: #18181c;
+  --shadow-color: #991b1b;
+  /* Crimson Red Shadow */
+  --input-text-color: #ef4444;
+  --brand-color: #18181c;
+  --scroll-thumb: #dc2626;
+
+  --welcome-bg: #26262b;
+  --welcome-text-color: #ffffff;
+  --muted-bg: #38383e;
+  --muted-text-color: #a1a1aa;
+  --checkbox-bg: #26262b;
+  --checkbox-checked-bg: #dc2626;
+}
+
 /* --- Reset & Base Variables --- */
 body,
 html {
